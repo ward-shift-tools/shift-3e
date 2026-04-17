@@ -1486,9 +1486,8 @@ with tab1:
     )
 
     # --- スタッフ情報カラム選択（表示/非表示） ---
-    _all_staff_detail_cols = ["Tier", "夜勤専従", "時短", "週勤務", "前月末",
-                              "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可",
-                              "夜勤研修", "研修夜勤回数", "新人", "新人卒業日"]
+    _all_staff_detail_cols = ["クラス", "遅出可", "週勤務", "前月末",
+                              "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
     if view_mode in ("👤 スタッフ情報", "👤+📝 すべて"):
         with st.expander("⚙ 表示カラム選択", expanded=False):
             _visible_staff_cols = st.multiselect(
@@ -1585,9 +1584,8 @@ with tab1:
             st.session_state.requests_df = pd.DataFrame(rows)
 
     # --- 統合DataFrame構築 ---
-    _staff_cols = ["Tier", "夜勤専従", "時短", "週勤務", "前月末",
-                   "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可",
-                   "夜勤研修", "研修夜勤回数", "新人", "新人卒業日"]
+    _staff_cols = ["クラス", "遅出可", "週勤務", "前月末",
+                   "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
     _day_cols = [str(d) for d in range(1, num_days + 1)]
 
     # staff_df と requests_df を名前で結合
@@ -1607,16 +1605,15 @@ with tab1:
     if view_mode == "👤 スタッフ情報":
         show_cols = ["名前"] + _visible_staff_cols
     elif view_mode == "📝 勤務希望":
-        # 勤務希望: 名前 + Tier（読み取り専用）+ 日付列
-        show_cols = ["名前", "Tier"] + _day_cols
+        # 勤務希望: 名前 + クラス（読み取り専用）+ 日付列
+        show_cols = ["名前", "クラス"] + _day_cols
     else:
         show_cols = ["名前"] + _visible_staff_cols + _day_cols
 
     # --- column_config 構築 ---
     _col_config_defs = {
-        "Tier": st.column_config.SelectboxColumn("Tier", options=["A", "AB", "B", "C+", "C"], width="small"),
-        "夜勤専従": st.column_config.CheckboxColumn("夜勤専従", width="small"),
-        "時短": st.column_config.CheckboxColumn("時短", width="small"),
+        "クラス": st.column_config.SelectboxColumn("クラス", options=list(VALID_CLASSES), width="small"),
+        "遅出可": st.column_config.CheckboxColumn("遅出可", width="small"),
         "週勤務": st.column_config.NumberColumn("週勤務", min_value=1, max_value=7, step=1, width="small"),
         "前月末": st.column_config.SelectboxColumn("前月末", options=["", "夜", "明"], width="small"),
         "夜勤Min": st.column_config.NumberColumn("夜勤Min", min_value=0, max_value=15, step=1, width="small"),
@@ -1625,16 +1622,12 @@ with tab1:
         "勤務曜日": st.column_config.TextColumn("勤務曜日", width="small", help="例: 月火木"),
         "祝日不可": st.column_config.CheckboxColumn("祝日不可", width="small"),
         "土日不可": st.column_config.CheckboxColumn("土日不可", width="small"),
-        "夜勤研修": st.column_config.CheckboxColumn("夜勤研修", width="small"),
-        "研修夜勤回数": st.column_config.NumberColumn("研修夜勤回数", min_value=1, max_value=15, step=1, width="small"),
-        "新人": st.column_config.CheckboxColumn("新人", width="small", help="ONで新人扱い（頭数のみカウント・リーダー/ペア判定外）"),
-        "新人卒業日": st.column_config.NumberColumn("新人卒業日", min_value=1, max_value=31, step=1, width="small", help="その日まで新人。空欄=月末まで新人"),
     }
     col_config = {}
-    # 勤務希望モードでは名前・Tierを読み取り専用に
+    # 勤務希望モードでは名前・クラスを読み取り専用に
     if view_mode == "📝 勤務希望":
         col_config["名前"] = st.column_config.TextColumn("名前", width="medium", disabled=True)
-        col_config["Tier"] = st.column_config.TextColumn("Tier", width="small", disabled=True)
+        col_config["クラス"] = st.column_config.TextColumn("クラス", width="small", disabled=True)
     else:
         col_config["名前"] = st.column_config.TextColumn("名前", width="medium")
     # 選択されたスタッフ情報カラムのみ追加（勤務希望モード以外）
@@ -1644,10 +1637,9 @@ with tab1:
                 col_config[c] = _col_config_defs[c]
     # 勤務希望カラム
     if view_mode != "👤 スタッフ情報":
-        _enabled_set = set(st.session_state.get("enabled_shifts",
-                            ["日", "夜", "準", "早", "遅", "長", "短", "休", "研", "委", "夜不", "休暇", "明休"]))
-        shift_options = [""] + [s for s in ["日", "夜", "準", "早", "遅", "長", "短", "休", "研", "委", "夜不", "休暇", "明休"]
-                                if s in _enabled_set]
+        _3e_all_shifts = ["日", "夜", "遅", "短", "休", "研", "夜不", "休暇", "明休", "遅希"]
+        _enabled_set = set(st.session_state.get("enabled_shifts", _3e_all_shifts))
+        shift_options = [""] + [s for s in _3e_all_shifts if s in _enabled_set]
         for d in range(1, num_days + 1):
             col_config[str(d)] = st.column_config.SelectboxColumn(
                 header_map[str(d)], options=shift_options, width="small")
@@ -1719,11 +1711,11 @@ with tab3:
     valid_staff = valid_staff[valid_staff["名前"].str.strip() != ""]
     ft_count = len(valid_staff[valid_staff["週勤務"].isna()]) if "週勤務" in valid_staff.columns else len(valid_staff)
     pt_count = len(valid_staff[valid_staff["週勤務"].notna()]) if "週勤務" in valid_staff.columns else 0
-    ded_count = len(valid_staff[valid_staff["夜勤専従"] == True]) if "夜勤専従" in valid_staff.columns else 0
+    late_count = len(valid_staff[valid_staff["遅出可"] == True]) if "遅出可" in valid_staff.columns else 0
 
     col_a.metric("スタッフ数", f"{len(valid_staff)}人")
     col_b.metric("フルタイム / パート", f"{ft_count} / {pt_count}")
-    col_c.metric("夜勤専従", f"{ded_count}人")
+    col_c.metric("遅出可", f"{late_count}人")
 
     st.markdown("---")
 
@@ -1731,11 +1723,11 @@ with tab3:
         staff_list = []
         for _, row in valid_staff.iterrows():
             name = str(row["名前"]).strip()
-            tier = str(row["Tier"]).strip() if pd.notna(row["Tier"]) else "C"
-            if tier not in VALID_TIERS:
-                st.warning(f"⚠ {name}: Tier '{tier}' 不正 → スキップ")
+            cls = str(row["クラス"]).strip() if pd.notna(row.get("クラス")) else CLS_WD
+            if cls not in VALID_CLASSES:
+                st.warning(f"⚠ {name}: クラス '{cls}' 不正 → スキップ")
                 continue
-            ded = bool(row.get("夜勤専従", False))
+            can_late = bool(row.get("遅出可", False))
             weekly = int(row["週勤務"]) if pd.notna(row.get("週勤務")) else None
             prev = str(row.get("前月末", "")).strip()
             if prev not in ("夜", "明", ""):
@@ -1753,15 +1745,11 @@ with tab3:
                 if not work_days:
                     work_days = None
             no_hol = bool(row.get("祝日不可", False))
-            short_t = bool(row.get("時短", False))
             no_we = bool(row.get("土日不可", False))
-            night_tr = bool(row.get("夜勤研修", False))
-            nt_max = int(row["研修夜勤回数"]) if pd.notna(row.get("研修夜勤回数")) else None
-            new_h = bool(row.get("新人", False))
-            nh_grad = int(row["新人卒業日"]) if pd.notna(row.get("新人卒業日")) else None
-            staff_list.append(Staff(name, tier, ded, weekly, prev,
-                                     n_min, n_max, c_max, work_days, no_hol, short_t,
-                                     no_we, night_tr, nt_max, new_h, nh_grad))
+            staff_list.append(Staff(
+                name, cls, can_late=can_late, weekly_days=weekly, prev_month=prev,
+                night_min=n_min, night_max=n_max, consec_max=c_max,
+                work_days=work_days, no_holiday=no_hol, no_weekend=no_we))
 
         if not staff_list:
             st.error("スタッフが0人です")
