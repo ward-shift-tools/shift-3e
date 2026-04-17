@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "streamlit-shift",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "streamlit", "run", "/Users/yoshikawayusuke/ShiftScheduler/app.py", "--server.headless=true"],
+      "port": 8501,
+      "autoPort": false
+    }
+  ]
+}
