@@ -15,7 +15,9 @@ from shift_scheduler import (
     Staff, build_and_solve,
     D, N, A, O, R, V, E, L, ST, LD, SN, I,
     SHIFTS, DAY_SHIFTS, NIGHT_SHIFTS,
+    CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD, VALID_CLASSES,
     TIER_A, TIER_AB, TIER_B, TIER_CP, TIER_C, VALID_TIERS,
+    UNIT_WD, UNIT_HCU, UNIT_ER, UNIT_LEAD,
     _get_holidays_and_days_off, _write_one_sheet,
     SETTINGS_DEF, SETTINGS_KEYS,
     _parse_staff_list, _parse_requests, _parse_settings,
@@ -25,7 +27,7 @@ from shift_scheduler import (
 # ページ設定
 # ============================================================
 st.set_page_config(
-    page_title="ICU勤務表作成ツール",
+    page_title="3E勤務表作成ツール",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -361,14 +363,9 @@ def _reqs_to_df(reqs_dict, staff_list, num_days):
 
 
 def _render_load_preview(staff_df, requests_df=None):
-    """読み込んだスタッフ情報の要約プレビューを表示。
-    属性ごとにグループ化して「意図通りに読めているか」を1秒で確認できるようにする。
-    論理エラーや要確認項目も警告として表示。
-    requests_df を渡すと委員会予定等の希望ベースの情報も表示。
-    """
+    """3E: 読み込んだスタッフ情報の要約プレビューを表示。"""
     if staff_df is None or staff_df.empty:
         return
-    # 有効な名前行のみ
     df = staff_df.dropna(subset=["名前"]).copy()
     df = df[df["名前"].astype(str).str.strip() != ""]
     if df.empty:
@@ -376,83 +373,57 @@ def _render_load_preview(staff_df, requests_df=None):
 
     n_total = len(df)
 
-    # Tier分布
-    tier_counts = df["Tier"].fillna("").astype(str).str.strip().value_counts()
-    tier_order = ["A", "AB", "B", "C+", "C"]
-    tier_str = " / ".join(
-        f"{t}:{int(tier_counts.get(t, 0))}" for t in tier_order if tier_counts.get(t, 0) > 0
-    )
-    other_tiers = [t for t in tier_counts.index if t not in tier_order and t]
-    if other_tiers:
-        tier_str += " / " + " / ".join(f"{t}:{int(tier_counts[t])}" for t in other_tiers)
-
-    # ヘルパ: Trueっぽい値判定
     def _is_true(v):
         if isinstance(v, bool):
             return v
-        s = str(v).strip().lower()
-        return s in ("true", "1", "◯", "○", "yes")
+        return str(v).strip().lower() in ("true", "1", "◯", "○", "yes")
 
-    # 各カテゴリ抽出
-    def _names_where(mask):
-        return df.loc[mask, "名前"].astype(str).tolist()
-
-    # 各カテゴリを単一ループで抽出（pandas.applyの挙動ブレを回避）
     def _is_zero(v):
         try:
             return v is not None and v != "" and float(v) == 0
         except (ValueError, TypeError):
             return False
+
     def _num_or_none(v):
         try:
-            if v is None or v == "":
-                return None
-            return int(float(v))
+            return int(float(v)) if v is not None and v != "" else None
         except (ValueError, TypeError):
             return None
 
+    # クラス分布
+    cls_col = "クラス" if "クラス" in df.columns else "Tier"
+    cls_counts = df[cls_col].fillna("").astype(str).str.strip().value_counts()
+    cls_order = [CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD]
+    cls_str = " / ".join(
+        f"{c}:{int(cls_counts.get(c, 0))}" for c in cls_order if cls_counts.get(c, 0) > 0
+    )
+    other_cls = [c for c in cls_counts.index if c not in cls_order and c]
+    if other_cls:
+        cls_str += " / " + " / ".join(f"{c}:{int(cls_counts[c])}" for c in other_cls)
+
     no_night = []
-    new_hires = []
-    nh_details = []
-    nh_with_night_list = []
+    late_staff = []
     pt_list = []
-    dedicated = []
-    short_time = []
-    training = []
     prev_month = []
     day_restrict = []
+    errors = []
+    warnings = []
 
     for _, row in df.iterrows():
         name = str(row.get("名前") or "").strip()
         if not name:
             continue
-        tier = str(row.get("Tier") or "").strip()
+        cls = str(row.get(cls_col) or "").strip()
         nmax = row.get("夜勤Max")
         wk_n = _num_or_none(row.get("週勤務"))
-        is_new = _is_true(row.get("新人"))
-        is_ded = _is_true(row.get("夜勤専従"))
-        is_st = _is_true(row.get("時短"))
-        is_tr = _is_true(row.get("夜勤研修"))
         pm = str(row.get("前月末") or "").strip()
 
         if _is_zero(nmax):
             no_night.append(name)
-        if is_new:
-            new_hires.append(name)
-            grad = _num_or_none(row.get("新人卒業日"))
-            nh_details.append(f"{name}({grad}日まで)" if grad is not None else f"{name}(月末まで)")
-            # 新人で夜勤可能性あり（Max未指定 or >0）
-            if nmax is None or nmax == "" or (not _is_zero(nmax)):
-                nh_with_night_list.append(name)
+        if _is_true(row.get("遅出可")):
+            late_staff.append(name)
         if wk_n is not None and wk_n > 0:
             pt_list.append(f"{name}(週{wk_n})")
-        if is_ded:
-            dedicated.append(name)
-        if is_st:
-            short_time.append(name)
-        if is_tr:
-            tm = _num_or_none(row.get("研修夜勤回数"))
-            training.append(f"{name}(計{tm}回)" if tm is not None else f"{name}(回数未指定)")
         if pm in ("夜", "明"):
             prev_month.append(f"{name}({pm})")
         parts = []
@@ -466,71 +437,37 @@ def _render_load_preview(staff_df, requests_df=None):
         if parts:
             day_restrict.append(f"{name}({'/'.join(parts)})")
 
-    # === 論理エラー検出 ===
-    warnings = []
-    errors = []
-    for _, row in df.iterrows():
-        name = row["名前"]
-        tier = str(row.get("Tier") or "").strip()
-        # Tierチェック
-        if tier not in ("A", "AB", "B", "C+", "C"):
-            errors.append(f"**{name}**: Tier '{tier}' が不正（A/AB/B/C+/C のいずれかが必要）")
-        # 時短 x 週勤務
-        if _is_true(row.get("時短")):
-            wk = row.get("週勤務")
-            if wk is None or wk == "":
-                warnings.append(f"**{name}**: 時短=◯ ですが週勤務が未指定（時短は通常パートタイム運用）")
-        # 夜勤研修 x 研修夜勤回数
-        if _is_true(row.get("夜勤研修")):
-            tm = row.get("研修夜勤回数")
-            if tm is None or tm == "":
-                warnings.append(f"**{name}**: 夜勤研修=◯ ですが研修夜勤回数が未指定")
-        # 夜勤専従 x Tier
-        if _is_true(row.get("夜勤専従")) and tier in ("C", "C+"):
-            warnings.append(f"**{name}**: 夜勤専従=◯ ですが Tier={tier}（通常Aリーダー資格者が担当）")
-        # 夜勤Min > 夜勤Max
+        # エラーチェック
+        if cls not in VALID_CLASSES:
+            errors.append(f"**{name}**: クラス '{cls}' が不正（{'/'.join(VALID_CLASSES)} のいずれかが必要）")
         nmin = row.get("夜勤Min")
-        nmax = row.get("夜勤Max")
         try:
             if (nmin is not None and nmin != "" and nmax is not None and nmax != ""
                     and float(nmin) > float(nmax)):
                 errors.append(f"**{name}**: 夜勤Min({int(float(nmin))}) > 夜勤Max({int(float(nmax))}) は不可能")
         except (ValueError, TypeError):
             pass
-        # 新人が夜勤する設定（情報として表示）
-        # ※ 新人でも夜勤可の運用あり → エラーではなく"確認事項"
 
-    # 新人で夜勤する可能性がある人（上のループで集計済み）
-    nh_with_night = nh_with_night_list
+    def _safe_join(lst):
+        return ", ".join(str(x) for x in lst)
 
-    # === レンダリング ===
     with st.expander(f"📋 読み込み結果サマリー（{n_total}人）— クリックして確認", expanded=True):
-        st.markdown(f"**🏷️ Tier構成**: {tier_str}")
-
-        def _safe_join(lst):
-            return ", ".join(str(x) for x in lst)
+        st.markdown(f"**🏷️ クラス構成**: {cls_str}")
 
         cols = st.columns(2)
         with cols[0]:
             if no_night:
                 st.markdown(f"**🚫 夜勤しない人（Max=0）** [{len(no_night)}人]  \n{_safe_join(no_night)}")
-            if new_hires:
-                st.markdown(f"**🎓 新人** [{len(new_hires)}人]  \n{_safe_join(nh_details)}")
+            if late_staff:
+                st.markdown(f"**🌅 遅出可能** [{len(late_staff)}人]  \n{_safe_join(late_staff)}")
             if pt_list:
                 st.markdown(f"**⏰ パートタイム** [{len(pt_list)}人]  \n{_safe_join(pt_list)}")
-            if short_time:
-                st.markdown(f"**🪶 時短** [{len(short_time)}人]  \n{_safe_join(short_time)}")
         with cols[1]:
-            if dedicated:
-                st.markdown(f"**🌙 夜勤専従** [{len(dedicated)}人]  \n{_safe_join(dedicated)}")
-            if training:
-                st.markdown(f"**🏃 夜勤研修** [{len(training)}人]  \n{_safe_join(training)}")
             if prev_month:
                 st.markdown(f"**🎯 前月繰越** [{len(prev_month)}人]  \n{_safe_join(prev_month)}")
             if day_restrict:
                 st.markdown(f"**📆 勤務制限** [{len(day_restrict)}人]  \n{_safe_join(day_restrict)}")
 
-        # 警告・エラー
         if errors:
             st.error("❌ **入力エラー**（このままでは動作不正）")
             for e in errors:
@@ -539,47 +476,16 @@ def _render_load_preview(staff_df, requests_df=None):
             st.warning("⚠️ **要確認**")
             for w in warnings:
                 st.markdown(f"- {w}")
-        if nh_with_night:
-            st.info(
-                f"ℹ️ **確認事項**: 新人で夜勤する設定の人がいます: {_safe_join(nh_with_night)}"
-                f"（新人夜勤時はA必須のハード制約が自動適用されます。夜勤させない場合は夜勤Max=0に設定）"
-            )
-        if not errors and not warnings and not nh_with_night:
+        if not errors and not warnings:
             st.success("✅ 論理エラー・要確認事項なし")
-
-        # 委員会予定の集計（希望データがあれば表示）
-        if requests_df is not None and not requests_df.empty:
-            committee_items = []  # list of (name, day)
-            day_cols = [c for c in requests_df.columns if str(c).isdigit()]
-            for _, rq_row in requests_df.iterrows():
-                name_v = str(rq_row.get("名前") or "").strip()
-                if not name_v:
-                    continue
-                for dc in day_cols:
-                    v = str(rq_row.get(dc) or "").strip()
-                    if v == "委":
-                        committee_items.append((name_v, int(dc)))
-            if committee_items:
-                # 日付ごとに集計
-                from collections import defaultdict
-                by_day = defaultdict(list)
-                for nm, dd in committee_items:
-                    by_day[dd].append(nm)
-                day_summary = ", ".join(
-                    f"{d}日({'/'.join(by_day[d])})" for d in sorted(by_day.keys())
-                )
-                st.info(
-                    f"🏛️ **委員会予定** [{len(committee_items)}件]: {day_summary}"
-                    f"（各日A/AB同席バックアップが自動で確保されます）"
-                )
 
 
 _SETTINGS_WIDGET_MAP = {
     "year": "inp_year", "month": "inp_month",
-    "min_day_staff": "inp_min_day", "min_day_staff_excl_new": "inp_min_day_excl",
-    "night_staff_count": "inp_night_count",
-    "max_night_regular": "inp_max_n_reg", "pref_night_regular": "inp_pref_n_reg",
-    "max_night_dedicated": "inp_max_n_ded", "pref_night_dedicated": "inp_pref_n_ded",
+    "min_ward_wd": "inp_min_ward_wd", "min_hcu_wd": "inp_min_hcu_wd",
+    "min_er_wd": "inp_min_er_wd",
+    "min_ward_hd": "inp_min_ward_hd", "min_hcu_hd": "inp_min_hcu_hd",
+    "max_night": "inp_max_n_reg", "pref_night": "inp_pref_n_reg",
     "max_consecutive": "inp_max_consec", "pref_consecutive": "inp_pref_consec",
     "solver_time_limit": "inp_time_limit",
 }
@@ -601,9 +507,8 @@ def _apply_settings(gs_settings):
 def _default_staff():
     return pd.DataFrame({
         "名前": ["スタッフA", "スタッフB", "スタッフC", "スタッフD", "スタッフE"],
-        "Tier": ["A", "A", "AB", "C", "C"],
-        "夜勤専従": [False, False, False, False, False],
-        "時短": [False, False, False, False, False],
+        "クラス": [CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD],
+        "遅出可": [True, False, True, False, False],
         "週勤務": [None, None, None, None, None],
         "前月末": ["", "", "", "", ""],
         "夜勤Min": [None, None, None, None, None],
@@ -612,10 +517,6 @@ def _default_staff():
         "勤務曜日": ["", "", "", "", ""],
         "祝日不可": [False, False, False, False, False],
         "土日不可": [False, False, False, False, False],
-        "夜勤研修": [False, False, False, False, False],
-        "研修夜勤回数": [None, None, None, None, None],
-        "新人": [False, False, False, False, False],
-        "新人卒業日": [None, None, None, None, None],
     })
 
 
@@ -915,19 +816,18 @@ def _generate_template_excel(year, month, num_staff=20):
         cell.border = bdr
         cell.alignment = Alignment(horizontal="center")
     _shift_type_rows = [
-        ("日", "日勤", "8:00〜17:00", "○"),
-        ("夜", "夜勤", "16:45〜翌9:00 (16h)", "○"),
-        ("準", "短夜勤", "17:00〜翌5:00 (12h)", ""),   # ICU二交代では不使用
-        ("早", "早出", "7:00〜16:00", ""),               # ICU二交代では不使用
-        ("遅", "遅出", "12:00〜21:00", ""),              # ICU二交代では不使用
-        ("長", "長日勤", "8:45〜21:00 (12h)", ""),       # ICU二交代では不使用
-        ("短", "時短", "8:45〜16:00 (6.25h)", "○"),     # 時短スタッフ用
+        ("日", "日勤", "8:45〜17:00", "○"),
+        ("夜", "夜勤", "16:30〜翌9:30 (16h)", "○"),
+        ("遅", "遅出", "12:00〜21:00", "○"),   # 3E: 毎日1名配置
+        ("準", "短夜勤", "17:00〜翌5:00 (12h)", ""),
+        ("早", "早出", "7:00〜16:00", ""),
+        ("長", "長日勤", "8:45〜21:00 (12h)", ""),
+        ("短", "時短", "8:45〜16:00 (6.25h)", ""),
         ("休", "公休", "—", "○"),
-        ("研", "研修", "—", "○"),
-        ("委", "委員会(勤務中に離席/A・AB同席必須)", "—", "○"),
         ("夜不", "夜勤不可(希望専用)", "—", "○"),
         ("休暇", "有給休暇(希望専用)", "—", "○"),
         ("明休", "明または休(希望専用)", "—", "○"),
+        ("遅希", "遅出希望(希望専用)", "—", "○"),
     ]
     for i, (sym, name, hours, use) in enumerate(_shift_type_rows):
         r = shift_type_start + 3 + i
@@ -940,20 +840,22 @@ def _generate_template_excel(year, month, num_staff=20):
         ws_s.cell(row=r, column=4).alignment = Alignment(horizontal="center")
 
     # === 共通データ ===
-    staff_headers = ["名前", "Tier", "夜勤専従", "時短", "週勤務", "前月末",
-                     "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可",
-                     "夜勤研修", "研修夜勤回数", "新人", "新人卒業日"]
+    # 3E スタッフ情報カラム
+    staff_headers = ["名前", "クラス", "遅出可", "週勤務", "前月末",
+                     "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
     n_staff_cols = len(staff_headers)
     weekdays_jp = ["月", "火", "水", "木", "金", "土", "日"]
     first_wd = date(year, month, 1).weekday()
     holidays = {d.day for d, _ in jpholiday.month_holidays(year, month)}
 
-    samples_name = ["山田太郎", "佐藤花子", "鈴木一郎"]
-    samples_tier = ["A", "AB", "C"]
+    samples_name = ["田中", "佐藤", "鈴木", "高橋", "山田"]
+    samples_tier = [CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD]
     samples_extra = [
-        [None, None, None, None, None, None, None, None, None, None, None, None, None, None],
-        [None, None, None, None, None, None, None, None, None, None, None, None, None, None],
-        [None, None, "3", None, None, None, None, "月水金", None, None, None, None, None, None],
+        ["◯", None, None, None, None, None, None, None, None],  # 遅出可
+        [None, None, None, None, None, None, None, None, None],
+        ["◯", None, None, None, None, None, None, None, None],
+        [None, None, None, None, None, None, None, None, None],
+        [None, None, None, None, None, None, None, None, None],
     ]
     total_rows = max(num_staff, len(samples_name))
 
@@ -1005,21 +907,20 @@ def _generate_template_excel(year, month, num_staff=20):
 
     # --- 凡例エリア ---
     legend_start_row = 4 + total_rows + 2
-    ws_staff.cell(row=legend_start_row, column=1, value="📖 Tier定義").font = Font(bold=True, size=11, color="548235")
+    ws_staff.cell(row=legend_start_row, column=1, value="📖 クラス定義").font = Font(bold=True, size=11, color="548235")
     tier_defs = [
-        ("A", "ベテラン・リーダー格（日勤/夜勤リーダー単独可）"),
-        ("AB", "中堅・リーダー代行可（夜勤リーダー可）"),
-        ("B", "一人立ち済み（B+B, B+C族の夜勤ペアは禁止）"),
-        ("C+", "C既卒（C+C+, C++Cペア禁止／A/AB/B下で夜勤可）"),
-        ("C", "新人・経験浅い（必ずA/AB/Bと夜勤ペア）"),
+        (CLS_ERL, "ERリーダー資格・ER/HCU/病棟すべての配置可・全リーダー可"),
+        (CLS_LDR, "リーダー資格・HCU/病棟配置可・病棟+HCUリーダー可"),
+        (CLS_ER,  "ER可スタッフ・ER/HCU/病棟配置可（リーダー資格なし）"),
+        (CLS_HCU, "HCU可スタッフ・HCU/病棟配置可"),
+        (CLS_WD,  "病棟のみ配置可"),
     ]
-    for i, (tier, desc) in enumerate(tier_defs):
-        ws_staff.cell(row=legend_start_row + 1 + i, column=1, value=tier).font = Font(bold=True)
+    for i, (cls, desc) in enumerate(tier_defs):
+        ws_staff.cell(row=legend_start_row + 1 + i, column=1, value=cls).font = Font(bold=True)
         ws_staff.cell(row=legend_start_row + 1 + i, column=2, value=desc).font = Font(color="555555", size=9)
     ws_staff.cell(row=legend_start_row + 7, column=1, value="📖 カラム説明").font = Font(bold=True, size=11, color="548235")
     col_defs = [
-        ("夜勤専従", "ONで夜勤/明け/休のみのパターン"),
-        ("時短", "ONで時短(ST)/早出/遅出/休のみ"),
+        ("遅出可", "◯=この人を遅出シフトに割り当て可能（クラス問わず個別指定）"),
         ("週勤務", "パートの週勤務日数（空欄=フルタイム）"),
         ("前月末", "前月末の勤務状態（夜/明）"),
         ("夜勤Min/Max", "個別の夜勤回数制限（空欄=全体設定）"),
@@ -1027,10 +928,6 @@ def _generate_template_excel(year, month, num_staff=20):
         ("勤務曜日", "特定曜日のみ勤務（例:月水金）"),
         ("祝日不可", "ONで祝日に勤務を入れない"),
         ("土日不可", "ONで土日に勤務を入れない"),
-        ("夜勤研修", "ONで夜勤研修中（通常2人+研修1人=MAX3人）"),
-        ("研修夜勤回数", "月間の研修夜勤上限（空欄=制限なし）"),
-        ("新人", "ONで新人扱い（日勤頭数には含むがリーダー・独立C判定から除外）"),
-        ("新人卒業日", "その日まで新人、翌日から通常運用（空欄=月末まで新人）"),
     ]
     for i, (col_name, desc) in enumerate(col_defs):
         ws_staff.cell(row=legend_start_row + 8 + i, column=1, value=col_name).font = Font(bold=True, size=9)
@@ -1041,11 +938,10 @@ def _generate_template_excel(year, month, num_staff=20):
     # ================================================================
     ws_req = wb.create_sheet("勤務希望")
     ws_req.cell(row=1, column=1, value=f"📝 勤務希望 — {year}年{month}月").font = Font(bold=True, size=14)
-    ws_req.cell(row=2, column=1, value="名前・Tierはスタッフ情報シートから自動同期。日付セルにシフト記号を入力してください。").font = Font(color="888888", size=9)
+    ws_req.cell(row=2, column=1, value="名前・クラスはスタッフ情報シートから自動同期。日付セルにシフト記号を入力してください。").font = Font(color="888888", size=9)
 
-    # ヘッダー行 (row 3): 名前 | Tier | 1(月) | 2(火) | ...
-    # row 3 ヘッダー
-    req_headers_fixed = ["名前", "Tier"]
+    # ヘッダー行 (row 3): 名前 | クラス | 1(月) | 2(火) | ...
+    req_headers_fixed = ["名前", "クラス"]
     for c, txt in enumerate(req_headers_fixed, 1):
         cell = ws_req.cell(row=3, column=c, value=txt)
         cell.fill = staff_hdr_fill; cell.font = staff_hdr_font; cell.border = bdr
@@ -1103,13 +999,16 @@ def _generate_template_excel(year, month, num_staff=20):
     req_legend_row = 4 + total_rows + 2
     ws_req.cell(row=req_legend_row, column=1, value="📖 シフト種別").font = Font(bold=True, size=11, color="1F4E79")
     shift_legend = [
-        ("日", "日勤 (8:00〜17:00)"), ("夜", "夜勤 (16:45〜翌9:00 / 16h)"),
-        ("準", "短夜勤 (17:00〜翌5:00 / 12h)"), ("早", "早出 (7:00〜16:00)"),
-        ("遅", "遅出 (12:00〜21:00)"), ("長", "長日勤 (8:45〜21:00 / 12h)"),
-        ("短", "時短 (8:45〜16:00 / 6.25h)"), ("休", "公休"),
-        ("研", "研修"), ("委", "委員会 (A/AB同席必須)"),
+        ("日", "日勤 (8:45〜17:00)"),
+        ("夜", "夜勤 (16:30〜翌9:30 / 16h)"),
+        ("遅", "遅出 (12:00〜21:00) ※遅出可フラグ必要"),
+        ("明", "明け ※自動割り当て（夜勤翌日）"),
+        ("休", "公休"),
+        ("暇", "有給休暇"),
         ("夜不", "この日は夜勤不可"),
-        ("休暇", "有給休暇"), ("明休", "明または休"),
+        ("休暇", "有給休暇（希望入力用）"),
+        ("明休", "明または休"),
+        ("遅希", "遅出希望（遅出可フラグのあるスタッフのみ）"),
     ]
     for i, (sym, desc) in enumerate(shift_legend):
         ws_req.cell(row=req_legend_row + 1 + i, column=1, value=sym).font = Font(bold=True, size=10)
@@ -1180,7 +1079,7 @@ def _parse_uploaded_excel(uploaded_file, year, month):
     # 3. 旧分離形式: 「スタッフ一覧」+「勤務希望」
     staff_list = []
     reqs = {}
-    n_staff_cols = 16  # 名前〜新人卒業日
+    n_staff_cols = 11  # 名前〜土日不可（3E: 11列）
 
     if "スタッフ情報" in wb.sheetnames:
         # === 新形式（スタッフ情報 + 勤務希望 2シート） ===
@@ -1299,7 +1198,7 @@ num_days = calendar.monthrange(year, month)[1]
 holidays_auto, weekends_auto, auto_public_off = _get_holidays_and_days_off(year, month)
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("勤務条件")
+st.sidebar.subheader("公休設定")
 
 public_off_mode = st.sidebar.radio("公休日数", ["自動（土日祝）", "手動指定"],
                                     horizontal=True, key="inp_po_mode")
@@ -1311,104 +1210,59 @@ else:
     public_off = st.sidebar.number_input("公休日数", 0, num_days, auto_public_off, key="inp_po_val")
     po_override = public_off
 
-min_day = st.sidebar.number_input("日勤最低人数（全体）", 1, 20, 5, key="inp_min_day",
-                                  help="新人込みの1日あたり最低日勤人数")
-min_day_excl = st.sidebar.number_input("日勤最低人数（新人除く）", 0, 20, 4, key="inp_min_day_excl",
-                                        help="新人を除いた経験者の1日あたり最低人数")
-night_count = st.sidebar.number_input("夜勤人数/日", 1, 5, 2, key="inp_night_count")
+st.sidebar.markdown("---")
+st.sidebar.subheader("日勤ユニット最低人数")
+st.sidebar.caption("平日")
+col1a, col1b, col1c = st.sidebar.columns(3)
+min_ward_wd = col1a.number_input("病棟", 1, 20, 4, key="inp_min_ward_wd")
+min_hcu_wd  = col1b.number_input("HCU", 1, 20, 2, key="inp_min_hcu_wd")
+min_er_wd   = col1c.number_input("ER", 1, 20, 3, key="inp_min_er_wd")
+st.sidebar.caption("休日（土日祝）")
+col2a, col2b = st.sidebar.columns(2)
+min_ward_hd = col2a.number_input("病棟（休日）", 1, 20, 4, key="inp_min_ward_hd")
+min_hcu_hd  = col2b.number_input("HCU（休日）", 1, 20, 2, key="inp_min_hcu_hd")
+st.sidebar.info("🌙 夜勤: 病棟2+HCU1+リーダー1=4名固定")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("夜勤設定")
-col1, col2 = st.sidebar.columns(2)
-max_n_reg = col1.number_input("通常 上限", 1, 15, 5, key="inp_max_n_reg")
-pref_n_reg = col2.number_input("通常 推奨", 1, 15, 4, key="inp_pref_n_reg")
 col3, col4 = st.sidebar.columns(2)
-max_n_ded = col3.number_input("専従 上限", 1, 20, 10, key="inp_max_n_ded")
-pref_n_ded = col4.number_input("専従 推奨", 1, 20, 9, key="inp_pref_n_ded")
+max_n_reg  = col3.number_input("夜勤 上限/月", 1, 15, 5, key="inp_max_n_reg")
+pref_n_reg = col4.number_input("夜勤 推奨/月", 1, 15, 4, key="inp_pref_n_reg")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("連勤設定")
 col5, col6 = st.sidebar.columns(2)
-max_consec = col5.number_input("最大連勤", 1, 10, 5, key="inp_max_consec")
+max_consec  = col5.number_input("最大連勤", 1, 10, 5, key="inp_max_consec")
 pref_consec = col6.number_input("推奨連勤", 1, 10, 4, key="inp_pref_consec")
 
-time_limit = st.sidebar.number_input("計算時間上限（秒）", 10, 600, 120, key="inp_time_limit")
+time_limit   = st.sidebar.number_input("計算時間上限（秒）", 10, 600, 120, key="inp_time_limit")
 num_patterns = st.sidebar.number_input("生成パターン数", 1, 5, 3, key="inp_num_patterns")
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("⚖ コンプライアンス設定")
-# ICU機能制限版: 二交代固定
-shift_system = "二交代（16h夜勤）"
-st.sidebar.info("🏥 二交代制（16h夜勤）固定")
-night_hours = 16
-
-_72h_limit = 72 // night_hours
-night_72h_mode_label = st.sidebar.radio(
-    f"72時間規制（≦{_72h_limit}回/月）",
-    ["🚫 必ず準拠（ハード制約）", "⚠ なるべく準拠（ソフト制約）", "✅ 許容（チェックのみ）"],
-    index=2,
-    key="inp_72h_mode",
-)
-_72h_mode_map = {
-    "🚫 必ず準拠（ハード制約）": "strict",
-    "⚠ なるべく準拠（ソフト制約）": "soft",
-    "✅ 許容（チェックのみ）": "none",
-}
-night_72h_mode = _72h_mode_map[night_72h_mode_label]
-if night_72h_mode == "strict":
-    st.sidebar.caption(f"✅ {night_hours}h×夜勤回数 を必ず72h以内に収めます（上限{_72h_limit}回）")
-elif night_72h_mode == "soft":
-    st.sidebar.caption(f"⚠ 72h超過を最小化しますが、達成できない場合は許容します")
-else:
-    st.sidebar.caption(f"✅ 制約なし（結果画面でのみ警告表示）")
-
-# ICU機能制限版: LD/SN不使用のため運用ルールは固定
-op_rules = {
-    "ld_sn": "strict",         # LD/SN自体が無効なので影響なし
-    "ld_consecutive": "strict",
-}
+night_hours   = 16
+night_72h_mode = "none"
+op_rules = {"ld_sn": "none", "ld_consecutive": "none"}
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔄 使用シフト種別")
-# ICU二交代制デフォルト: 日/夜/短(時短)/休/研 + 希望専用(夜不/休暇/明休)
-_all_shift_symbols = ["日", "夜", "準", "早", "遅", "長", "短", "休", "研", "委", "夜不", "休暇", "明休"]
-_icu_default = ["日", "夜", "短", "休", "研", "委", "夜不", "休暇", "明休"]
-_default_enabled = st.session_state.get("enabled_shifts", _icu_default)
+# 3E二交代制デフォルト: 日/夜/遅/休/研 + 希望専用(夜不/休暇/明休/遅希)
+_all_shift_symbols = ["日", "夜", "遅", "短", "休", "研", "夜不", "休暇", "明休", "遅希"]
+_3e_default = ["日", "夜", "遅", "休", "研", "夜不", "休暇", "明休", "遅希"]
+_default_enabled = st.session_state.get("enabled_shifts", _3e_default)
 enabled_shifts = st.sidebar.multiselect(
     "有効なシフト種別",
     options=_all_shift_symbols,
     default=[s for s in _default_enabled if s in _all_shift_symbols],
     key="inp_enabled_shifts",
-    help="ICU二交代制: 日勤・夜勤が基本。時短は時短スタッフ用。"
+    help="3E二交代制: 日勤・夜勤・遅出が基本。遅希は遅出希望。"
 )
 st.session_state.enabled_shifts = enabled_shifts
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🏥 人員配置基準")
-# ICU機能制限版: ICU固定
-unit_type = "ICU（特定集中治療室管理料 1〜4）"
-st.sidebar.info(f"🏥 {unit_type}")
-_ratio_val, _check_night, _ratio_label, _basis_label = UNIT_STANDARDS[unit_type]
-bed_count = st.sidebar.number_input(
-    "病床数（床）", min_value=1, max_value=200, value=4,
-    key="inp_bed_count"
-)
-_required_nurses = max(1, -(-bed_count // _ratio_val))
-_scope = "日勤・夜勤（24時間）" if _check_night else "日勤帯"
-st.sidebar.caption(
-    f"基準: {_ratio_label} ／ {_scope}\n"
-    f"必要人数: {bed_count}床 ÷ {_ratio_val} = **{_required_nurses}人以上**"
-)
-st.sidebar.caption(f"根拠: {_basis_label}")
-nurse_ratio = _ratio_label  # 表示用
 
 settings = {
     "year": year, "month": month,
     "public_off_override": po_override,
-    "min_day_staff": min_day, "min_day_staff_excl_new": min_day_excl,
-    "night_staff_count": night_count,
-    "max_night_regular": max_n_reg, "pref_night_regular": pref_n_reg,
-    "max_night_dedicated": max_n_ded, "pref_night_dedicated": pref_n_ded,
+    "min_ward_wd": min_ward_wd, "min_hcu_wd": min_hcu_wd, "min_er_wd": min_er_wd,
+    "min_ward_hd": min_ward_hd, "min_hcu_hd": min_hcu_hd,
+    "max_night": max_n_reg, "pref_night": pref_n_reg,
     "max_consecutive": max_consec, "pref_consecutive": pref_consec,
     "solver_time_limit": time_limit, "holidays": "",
 }
@@ -1416,7 +1270,7 @@ settings = {
 # ============================================================
 # メインエリア
 # ============================================================
-st.title("🏥 ICU勤務表自動作成ツール（二交代制）")
+st.title("🏥 3E勤務表自動作成ツール（二交代制）")
 
 tab0, tab1, tab3, tab4, tab5 = st.tabs(
     ["📂 データ入力", "📋 スタッフ・勤務希望", "⚡ 生成", "📊 結果", "🏠 ダッシュボード"])
@@ -1998,6 +1852,10 @@ with tab4:
         r_weekly = result.get("weekly", {})
         r_dedicated = result.get("dedicated", {})
         missed = result.get("missed_requests", {})
+        # 3E: stub ICU-specific variables (not applicable)
+        bed_count = 0; _ratio_val = 1; _check_night = False
+        unit_type = "3E一般病棟"; nurse_ratio = "—"; _basis_label = "3E一般病棟"
+        shift_system = "二交代制"
 
         st.subheader(f"📊 {r_year}年{r_month}月 勤務表 — パターン {pat_idx + 1}")
 
@@ -2422,6 +2280,8 @@ with tab5:
         _r_weekly = _res.get("weekly", {})
         _r_public_off = _res.get("public_off", 0)
         _missed = _res.get("missed_requests", {})
+        # 3E stubs
+        bed_count = 0; _ratio_val = 1; _check_night = False
 
         st.caption(f"{_r_year}年{_r_month}月 ／ スタッフ {len(_names)}名 ／ {_r_num_days}日間")
 

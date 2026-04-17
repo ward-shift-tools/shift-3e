@@ -73,10 +73,27 @@ NIGHT_SHIFTS = [N, SN]
 # 夜勤系ごとの時間数（72h計算用）
 NIGHT_HOURS_MAP = {N: 16, SN: 12}  # デフォルト値 / 実際は設定値で上書き
 
-VALID_REQUEST = {D, N, O, R, E, L, ST, LD, SN, I, "夜不", "休暇", "明休"}
-TIER_A = "A"; TIER_AB = "AB"; TIER_B = "B"; TIER_CP = "C+"; TIER_C = "C"
-VALID_TIERS = {TIER_A, TIER_AB, TIER_B, TIER_CP, TIER_C}
+VALID_REQUEST = {D, N, O, R, E, L, ST, LD, SN, I, "夜不", "休暇", "明休", "遅希"}
+# 3E クラス制度
+CLS_ERL = "ERリーダー"   # ER/HCU/病棟リーダー可
+CLS_LDR = "リーダー"     # HCU/病棟リーダー可
+CLS_ER  = "ER可"         # ER/HCU/病棟配置可
+CLS_HCU = "HCU可"        # HCU/病棟配置可
+CLS_WD  = "病棟可"       # 病棟のみ
+VALID_CLASSES = {CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD}
+# 後方互換: Tier定数をクラス定数に紐付け（Excel出力等で使用箇所を最小化）
+TIER_A = CLS_ERL; TIER_AB = CLS_LDR; TIER_B = CLS_ER
+TIER_CP = CLS_HCU; TIER_C = CLS_WD
+VALID_TIERS = VALID_CLASSES
 MAX_REQUEST_DAYS = 7
+
+# ユニット定数
+UNIT_WD   = "病棟"
+UNIT_HCU  = "HCU"
+UNIT_ER   = "ER"
+UNIT_LEAD = "共リーダー"
+DAY_UNITS = [UNIT_WD, UNIT_HCU, UNIT_ER, UNIT_LEAD]
+NIGHT_UNITS = [UNIT_WD, UNIT_HCU, UNIT_LEAD]
 
 # openpyxl styles
 _F = Font; _PF = PatternFill; _A = Alignment; _B = Border; _S = Side
@@ -109,53 +126,49 @@ FS  = {
     "委": _PF(start_color="FFE699", end_color="FFE699", fill_type="solid"),  # 委員会: 金色系
 }
 FT = {
-    TIER_A:  _PF(start_color="DAEEF3", end_color="DAEEF3", fill_type="solid"),
-    TIER_AB: _PF(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid"),
-    TIER_B:  _PF(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid"),
-    TIER_CP: _PF(start_color="FFF4E0", end_color="FFF4E0", fill_type="solid"),  # C+: 薄橙
-    TIER_C:  _PF(start_color="FAFAFA", end_color="FAFAFA", fill_type="solid"),
+    CLS_ERL: _PF(start_color="DAEEF3", end_color="DAEEF3", fill_type="solid"),
+    CLS_LDR: _PF(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid"),
+    CLS_ER:  _PF(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid"),
+    CLS_HCU: _PF(start_color="FFF4E0", end_color="FFF4E0", fill_type="solid"),
+    CLS_WD:  _PF(start_color="FAFAFA", end_color="FAFAFA", fill_type="solid"),
 }
 
 SAMPLE_STAFF = [
-    ("A",  "A",  "", "", ""),
-    ("B",  "A",  "", "", ""),
-    ("C",  "A",  "", "", ""),
-    ("D",  "A",  "", "", ""),
-    ("E",  "AB", "", "", ""),
-    ("F",  "AB", "", "", ""),
-    ("G",  "AB", "", "", ""),
-    ("H",  "B",  "", "", ""),
-    ("I",  "B",  "", "", ""),
-    ("J",  "C+", "", "", ""),
-    ("K",  "C+", "", "", ""),
-    ("L",  "C",  "", "", ""),
-    ("M",  "C",  "", "", ""),
-    ("N",  "C",  "", "3", ""),   # 週3勤務
-    ("O",  "C",  "", "3", ""),   # 週3勤務
+    ("田中",  CLS_ERL, "◯", "", ""),
+    ("佐藤",  CLS_ERL, "",  "", ""),
+    ("鈴木",  CLS_LDR, "◯", "", ""),
+    ("高橋",  CLS_LDR, "",  "", ""),
+    ("山田",  CLS_ER,  "◯", "", ""),
+    ("中村",  CLS_ER,  "",  "", ""),
+    ("小林",  CLS_HCU, "◯", "", ""),
+    ("加藤",  CLS_HCU, "",  "", ""),
+    ("吉田",  CLS_WD,  "",  "", ""),
+    ("山口",  CLS_WD,  "",  "", ""),
 ]
 
 SETTINGS_DEF = [
-    ("対象年",             2026, "西暦4桁"),
-    ("対象月",             5,    "1〜12"),
-    ("公休日数",           "",   "空欄=自動(土日祝) 数値=手動指定"),
-    ("日勤最低人数",       5,    "1日あたり（新人込み全体）"),
-    ("日勤最低人数（新人除く）", 4, "1日あたり（新人を除いた経験者）"),
-    ("夜勤人数",           2,    "1日あたりの固定人数"),
-    ("夜勤上限（通常）",   5,    "月あたり最大回数"),
-    ("夜勤推奨（通常）",   4,    "月あたり推奨回数"),
-    ("夜勤上限（専従）",   10,   "夜勤専従者の月最大"),
-    ("夜勤推奨（専従）",   9,    "夜勤専従者の月推奨"),
-    ("最大連勤日数",       5,    "超過禁止"),
-    ("推奨連勤日数",       4,    "超過ペナルティ"),
-    ("計算時間上限（秒）", 120,  ""),
-    ("祝日",               "",   "日付をカンマ区切り 例: 3,4,5"),
+    ("対象年",                2026, "西暦4桁"),
+    ("対象月",                5,    "1〜12"),
+    ("公休日数",              "",   "空欄=自動(土日祝) 数値=手動指定"),
+    ("病棟最低人数_平日",     4,    "平日の病棟最低配置人数"),
+    ("HCU最低人数_平日",      2,    "平日のHCU最低配置人数"),
+    ("ER最低人数_平日",       3,    "平日のER最低配置人数（1名はERリーダー必須）"),
+    ("病棟最低人数_休日",     4,    "土日祝の病棟最低配置人数"),
+    ("HCU最低人数_休日",      2,    "土日祝のHCU最低配置人数"),
+    ("夜勤上限",              5,    "月あたり最大夜勤回数"),
+    ("夜勤推奨",              4,    "月あたり推奨夜勤回数"),
+    ("最大連勤日数",          5,    "超過禁止"),
+    ("推奨連勤日数",          4,    "超過ペナルティ"),
+    ("計算時間上限（秒）",    120,  ""),
+    ("祝日",                  "",   "日付をカンマ区切り 例: 3,4,5"),
 ]
 SETTINGS_KEYS = [
-    "year", "month", "public_off_override", "min_day_staff", "min_day_staff_excl_new",
-    "night_staff_count",
-    "max_night_regular", "pref_night_regular",
-    "max_night_dedicated", "pref_night_dedicated",
-    "max_consecutive", "pref_consecutive", "solver_time_limit", "holidays",
+    "year", "month", "public_off_override",
+    "min_ward_wd", "min_hcu_wd", "min_er_wd",
+    "min_ward_hd", "min_hcu_hd",
+    "max_night", "pref_night",
+    "max_consecutive", "pref_consecutive",
+    "solver_time_limit", "holidays",
 ]
 
 
@@ -163,27 +176,28 @@ SETTINGS_KEYS = [
 # データ構造
 # ============================================================
 class Staff:
-    def __init__(self, name, tier, dedicated=False, weekly_days=None, prev_month="",
+    def __init__(self, name, cls, can_late=False, weekly_days=None, prev_month="",
                  night_min=None, night_max=None, consec_max=None,
-                 work_days=None, no_holiday=False, short_time=False,
-                 no_weekend=False, night_training=False, night_training_max=None,
-                 new_hire=False, new_hire_graduation_day=None):
+                 work_days=None, no_holiday=False, no_weekend=False):
         self.name = name
-        self.tier = tier
-        self.dedicated = dedicated
+        self.cls = cls                  # クラス (CLS_ERL/CLS_LDR/CLS_ER/CLS_HCU/CLS_WD)
+        self.tier = cls                 # 後方互換用エイリアス
+        self.can_late = can_late        # True=遅出勤務可能
         self.weekly_days = weekly_days  # None=フルタイム, int=週N日
         self.prev_month = prev_month    # ""=通常, "夜"=前月末夜勤, "明"=前月末明け
         self.night_min = night_min      # None=設定値を使用, int=個別指定
-        self.night_max = night_max      # None=設定値を使用, int=個別指定
+        self.night_max = night_max      # None=設定値を使用, int=個別指定 (0=夜勤完全禁止)
         self.consec_max = consec_max    # None=設定値を使用, int=個別の連勤上限
         self.work_days = work_days      # None=全曜日, set of ints (0=月..6=日)
         self.no_holiday = no_holiday    # True=祝日勤務不可
-        self.short_time = short_time    # True=時短勤務（育児・介護）→日勤をSTに置換
         self.no_weekend = no_weekend    # True=土日勤務不可
-        self.night_training = night_training      # True=夜勤研修中（3人目枠）
-        self.night_training_max = night_training_max  # None=制限なし, int=月間研修夜勤上限
-        self.new_hire = new_hire        # True=新人期間中（リーダー・B+C判定から除外）
-        self.new_hire_graduation_day = new_hire_graduation_day  # None=月末まで新人, int=その日まで新人（翌日から通常）
+        # ICU互換フィールド（3Eでは未使用、デフォルト値を維持）
+        self.dedicated = False
+        self.short_time = False
+        self.night_training = False
+        self.night_training_max = None
+        self.new_hire = False
+        self.new_hire_graduation_day = None
     @property
     def is_parttime(self):
         return self.weekly_days is not None
@@ -325,7 +339,20 @@ def _to_int(val):
         return None
 
 def _parse_staff_list(rows):
-    """行データからStaffリストを生成 (rows: list of lists, header skip済み)"""
+    """行データからStaffリストを生成 (rows: list of lists, header skip済み)
+    3E カラム配列:
+      0: 名前
+      1: クラス (ERリーダー/リーダー/ER可/HCU可/病棟可)
+      2: 遅出可 (◯/空)
+      3: 週勤務 (パート週N日、空=フルタイム)
+      4: 前月末 (夜/明/空)
+      5: 夜勤Min
+      6: 夜勤Max (0=夜勤完全禁止)
+      7: 連勤Max
+      8: 勤務曜日 ("月火木" など)
+      9: 祝日不可 (◯/空)
+      10: 土日不可 (◯/空)
+    """
     staff = []
     for row in rows:
         if len(row) < 2:
@@ -333,29 +360,20 @@ def _parse_staff_list(rows):
         name = str(row[0]).strip()
         if not name:
             break
-        tier = str(row[1]).strip()
-        if tier not in VALID_TIERS:
-            print(f"⚠ '{name}' Tier '{tier}' 不正 → スキップ")
+        cls = str(row[1]).strip()
+        if cls not in VALID_CLASSES:
+            print(f"⚠ '{name}' クラス '{cls}' 不正 → スキップ")
             continue
-        ded = _is_truthy(row[2]) if len(row) > 2 else False
-        # 時短フラグ（新カラム: index 3）— 旧フォーマット(10列)では週勤務がindex3
-        # 新フォーマット(11列)検出: len>=11 なら時短あり
-        if len(row) >= 11:
-            short_t = _is_truthy(row[3]) if len(row) > 3 else False
-            col_offset = 4  # 時短の次から
-        else:
-            short_t = False
-            col_offset = 3  # 旧フォーマット: 時短列なし
-        weekly = _to_int(row[col_offset]) if len(row) > col_offset else None
-        prev = str(row[col_offset+1]).strip() if len(row) > col_offset+1 else ""
+        can_late = _is_truthy(row[2]) if len(row) > 2 else False
+        weekly   = _to_int(row[3])    if len(row) > 3 else None
+        prev     = str(row[4]).strip() if len(row) > 4 else ""
         if prev not in ("夜", "明", ""):
             print(f"⚠ '{name}' 前月末 '{prev}' 不正（夜/明/空欄）→ 無視")
             prev = ""
-        n_min = _to_int(row[col_offset+2]) if len(row) > col_offset+2 else None
-        n_max = _to_int(row[col_offset+3]) if len(row) > col_offset+3 else None
-        c_max = _to_int(row[col_offset+4]) if len(row) > col_offset+4 else None
-        # 勤務曜日: "月火木" → {0, 1, 3}
-        wd_str = str(row[col_offset+5]).strip() if len(row) > col_offset+5 else ""
+        n_min = _to_int(row[5]) if len(row) > 5 else None
+        n_max = _to_int(row[6]) if len(row) > 6 else None
+        c_max = _to_int(row[7]) if len(row) > 7 else None
+        wd_str = str(row[8]).strip() if len(row) > 8 else ""
         wd_map = {"月":0, "火":1, "水":2, "木":3, "金":4, "土":5, "日":6}
         work_days = None
         if wd_str:
@@ -365,15 +383,10 @@ def _parse_staff_list(rows):
                     work_days.add(wd_map[ch])
             if not work_days:
                 work_days = None
-        no_hol = _is_truthy(row[col_offset+6]) if len(row) > col_offset+6 else False
-        no_we = _is_truthy(row[col_offset+7]) if len(row) > col_offset+7 else False
-        night_tr = _is_truthy(row[col_offset+8]) if len(row) > col_offset+8 else False
-        nt_max = _to_int(row[col_offset+9]) if len(row) > col_offset+9 else None
-        new_h = _is_truthy(row[col_offset+10]) if len(row) > col_offset+10 else False
-        nh_grad = _to_int(row[col_offset+11]) if len(row) > col_offset+11 else None
-        staff.append(Staff(name, tier, ded, weekly, prev, n_min, n_max, c_max,
-                           work_days, no_hol, short_t, no_we, night_tr, nt_max,
-                           new_h, nh_grad))
+        no_hol = _is_truthy(row[9])  if len(row) > 9  else False
+        no_we  = _is_truthy(row[10]) if len(row) > 10 else False
+        staff.append(Staff(name, cls, can_late, weekly, prev, n_min, n_max, c_max,
+                           work_days, no_hol, no_we))
     if not staff:
         print("✗ スタッフが0人です")
         sys.exit(1)
@@ -807,20 +820,27 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         public_off = auto_public_off
 
     names     = [s.name for s in staff_list]
-    tiers     = {s.name: s.tier for s in staff_list}
-    dedicated = {s.name: s.dedicated for s in staff_list}
+    classes   = {s.name: s.cls for s in staff_list}
+    tiers     = classes  # 後方互換エイリアス
     weekly    = {s.name: s.weekly_days for s in staff_list}
     prev_m    = {s.name: s.prev_month for s in staff_list}
     night_min = {s.name: s.night_min for s in staff_list}
     night_max = {s.name: s.night_max for s in staff_list}
-    # デフォルト夜勤回数: 通常フルタイムスタッフで未指定なら pref_n_reg ± 1 を適用
-    #   night_min 未指定 → max(0, pref_n_reg - 1)  (例: 4→3)
-    #   night_max 未指定 → pref_n_reg + 1          (例: 4→5)
-    # 専従・パート・新人・夜勤Max=0明示指定・時短 は対象外
+    can_late  = {s.name: s.can_late for s in staff_list}
+    dedicated = {s.name: False for s in staff_list}  # 3Eは専従なし（ICU互換）
+    # 3E 設定値読み込み
+    min_ward_wd = S("min_ward_wd", 4)
+    min_hcu_wd  = S("min_hcu_wd",  2)
+    min_er_wd   = S("min_er_wd",   3)
+    min_ward_hd = S("min_ward_hd", 4)
+    min_hcu_hd  = S("min_hcu_hd",  2)
+    max_n_reg   = S("max_night", 5)
+    pref_n_reg  = S("pref_night", 4)
+    # デフォルト夜勤回数（フルタイム・夜勤禁止でないスタッフ）
     _default_min = max(0, pref_n_reg - 1)
     _default_max = pref_n_reg + 1
     for _s in staff_list:
-        if _s.dedicated or _s.weekly_days is not None or _s.new_hire or _s.short_time:
+        if _s.weekly_days is not None:
             continue
         if _s.night_max == 0:
             continue
@@ -829,65 +849,46 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         if night_max[_s.name] is None:
             night_max[_s.name] = _default_max
     consec_max_ind = {s.name: s.consec_max for s in staff_list}
-    work_days_map = {s.name: s.work_days for s in staff_list}
+    work_days_map  = {s.name: s.work_days for s in staff_list}
     no_holiday_map = {s.name: s.no_holiday for s in staff_list}
     no_weekend_map = {s.name: s.no_weekend for s in staff_list}
-    short_time_map = {s.name: s.short_time for s in staff_list}
-    night_training_map = {s.name: s.night_training for s in staff_list}
-    night_training_max_map = {s.name: s.night_training_max for s in staff_list}
-    training_staff = [s.name for s in staff_list if s.night_training]
-    new_hire_map = {s.name: s.new_hire for s in staff_list}
-    new_hire_grad_map = {s.name: s.new_hire_graduation_day for s in staff_list}
 
-    def is_new_hire_on(s, d_idx):
-        """d_idx (0-indexed) 時点でスタッフsが新人期間中か判定"""
-        if not new_hire_map.get(s):
-            return False
-        grad = new_hire_grad_map.get(s)
-        if grad is None:
-            return True  # 月末まで新人
-        # day_num = d_idx + 1 が grad 以下なら新人、grad より大きければ通常扱い
-        return (d_idx + 1) <= grad
-
-    fulltime  = [n for n in names if weekly[n] is None]
-    parttime  = [n for n in names if weekly[n] is not None]
+    fulltime = [n for n in names if weekly[n] is None]
+    parttime = [n for n in names if weekly[n] is not None]
     fwd = date(year, month, 1).weekday()  # 月初の曜日 (0=月)
-    a_staff   = [n for n in names if tiers[n] == TIER_A]
-    ab_staff  = [n for n in names if tiers[n] == TIER_AB]
-    b_staff   = [n for n in names if tiers[n] == TIER_B and weekly[n] is None]
-    cp_staff  = [n for n in names if tiers[n] == TIER_CP and weekly[n] is None]
-    c_staff   = [n for n in names if tiers[n] == TIER_C and weekly[n] is None]
-    # 日勤リーダー単独可: A全員（時短・週勤務指定でも Tier=A は単独L可と運用）
-    day_leader_pool = [n for n in a_staff]
-    # 夜勤リーダー可: A+AB かつ夜勤可能（weekly指定なし、night_max≠0、時短なし）
-    night_leader_pool = [n for n in (a_staff + ab_staff)
-                         if weekly[n] is None and not short_time_map.get(n)
-                         and night_max[n] != 0]
-    # A夜勤リーダー: 夜勤可能なAのみ（厳格チェック用）
-    a_night_leader = [n for n in a_staff
-                      if weekly[n] is None and not short_time_map.get(n)
-                      and night_max[n] != 0]
-    # 既存変数 leader は互換性のため保持（一部ロジックで参照されるのを避けられない場合用）
-    leader    = night_leader_pool
-    new_hire_staff = [n for n in names if new_hire_map.get(n)]
+
+    # クラス別プール
+    erl_staff   = [n for n in names if classes[n] == CLS_ERL]  # ERリーダー
+    ldr_staff   = [n for n in names if classes[n] == CLS_LDR]  # リーダー
+    er_staff    = [n for n in names if classes[n] == CLS_ER]   # ER可
+    hcu_staff   = [n for n in names if classes[n] == CLS_HCU]  # HCU可
+    wd_staff    = [n for n in names if classes[n] == CLS_WD]   # 病棟可のみ
+
+    # リーダープール（日勤・夜勤共通リーダー資格）
+    leader_pool = erl_staff + ldr_staff
+    # ER配置可（基本資格: ER可 + ERリーダー）+ 特例で全クラス許容（ER leaderが必ずいる前提）
+    er_capable  = erl_staff + er_staff
+    # HCU配置可
+    hcu_capable = erl_staff + ldr_staff + er_staff + hcu_staff
+    # 遅出可能スタッフ
+    late_pool   = [n for n in names if can_late[n]]
+
+    night_count = 4  # 3E: 夜勤は病棟2+HCU1+リーダー1=4名固定
 
     print(f"\n{'='*55}")
-    print(f"  勤務表: {year}年{month}月 ({num_days}日)")
+    print(f"  3E勤務表: {year}年{month}月 ({num_days}日)")
     print(f"{'='*55}")
-    print(f"スタッフ: {len(names)}人 (A:{len(a_staff)} AB:{len(ab_staff)} "
-          f"B:{len(b_staff)} C+:{len(cp_staff)} C:{len(c_staff)})")
+    print(f"スタッフ: {len(names)}人 "
+          f"(ERリーダー:{len(erl_staff)} リーダー:{len(ldr_staff)} "
+          f"ER可:{len(er_staff)} HCU可:{len(hcu_staff)} 病棟可:{len(wd_staff)})")
     if parttime:
         pt_str = ", ".join(f"{n}(週{weekly[n]})" for n in parttime)
         print(f"パートタイム: {pt_str}")
+    if late_pool:
+        print(f"遅出可能: {', '.join(late_pool)}")
     carry = [(n, prev_m[n]) for n in names if prev_m[n]]
     if carry:
         print(f"前月繰越: {', '.join(f'{n}({v})' for n, v in carry)}")
-    if new_hire_staff:
-        nh_str = ", ".join(
-            f"{n}({'月末まで' if new_hire_grad_map.get(n) is None else f'{new_hire_grad_map[n]}日まで'})"
-            for n in new_hire_staff
-        )
-        print(f"新人: {nh_str}")
     if po_override is not None and po_override != "":
         print(f"公休日数: {public_off}日 (手動設定)  ※自動計算={auto_public_off}日")
     else:
@@ -899,16 +900,16 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     if requests:
         print(f"希望: {len(requests)}人")
         for s, rq in requests.items():
-            sn = {D:"日", N:"夜", O:"休", R:"研", I:"委", "夜不":"夜不", "休暇":"休暇", "明休":"明休"}
+            sn = {D:"日", N:"夜", O:"休", L:"遅", "夜不":"夜不", "休暇":"休暇", "明休":"明休", "遅希":"遅希"}
             print(f"  {s}: {', '.join(f'{d}日={sn.get(t,t)}' for d,t in sorted(rq.items()))}")
     if num_patterns > 1:
         print(f"\n生成パターン数: {num_patterns}")
 
-    total_leader = len(leader) * max_n_reg
-    if total_leader < num_days:
-        print(f"\n⚠ リーダー夜勤枠({total_leader}) < {num_days}日")
+    total_leader_slots = len(leader_pool) * max_n_reg
+    if total_leader_slots < num_days:
+        print(f"\n⚠ リーダー夜勤枠({total_leader_slots}) < {num_days}日")
     else:
-        print(f"\n✓ リーダー夜勤枠({total_leader}) >= {num_days}日")
+        print(f"\n✓ リーダー夜勤枠({total_leader_slots}) >= {num_days}日")
 
     # ============================================================
     prob = pulp.LpProblem("NurseShift", pulp.LpMinimize)
@@ -916,26 +917,32 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     # --- 変数削減: スタッフ属性に応じて不要なシフト変数を除外 ---
     _excluded = set()  # (s, t) の組: このスタッフにこのシフトは不要
 
-    # --- 施設で使用しないシフト種別を全スタッフから除外 ---
+    # 3E: 使用しない拡張シフトを除外（デフォルト: R/I/E/ST/LD/SN 無効）
+    _3e_inactive = [R, I, E, ST, LD, SN]
     if enabled_shifts is not None:
         _sym_to_shift = {"準": SN, "早": E, "遅": L, "長": LD, "短": ST}
         for sym, shift_type in _sym_to_shift.items():
             if sym not in enabled_shifts:
                 for s in names:
                     _excluded.add((s, shift_type))
+    else:
+        # デフォルト: 3E で使わないシフトを全員から除外
+        for t in _3e_inactive:
+            for s in names:
+                _excluded.add((s, t))
 
+    # 遅出(L): can_late=False のスタッフは遅出不可
     for s in names:
-        if dedicated.get(s):
-            # 専従: 日勤系(R/E/L/ST/LD/I)は不要（Dは希望日のみ後で個別処理）
-            for t in [R, E, L, ST, LD, I]:
-                _excluded.add((s, t))
-        if short_time_map.get(s):
-            # 時短: D/N/SN/LD は不要 → STのみ使用
-            for t in [D, N, SN, LD]:
-                _excluded.add((s, t))
-        else:
-            # 時短フラグなし → STは使わない（通常日勤Dのみ）
-            _excluded.add((s, ST))
+        if not can_late.get(s):
+            _excluded.add((s, L))
+
+    # パートタイム: N 不可
+    for s in parttime:
+        _excluded.add((s, N))
+
+    # STは全員除外（3Eでは時短シフトなし）
+    for s in names:
+        _excluded.add((s, ST))
 
     # 有効な(s,d,t)のみ変数を生成
     _valid_keys = [(s, d, t) for s in names for d in days for t in SHIFTS
@@ -1066,7 +1073,9 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         for d in days[:-1]:
             prob += x[s, d, O] + x[s, d+1, N] <= 1
             prob += x[s, d, O] + x[s, d+1, SN] <= 1
-    # 夜勤専従: 希望がない限り日勤(D)なし（R/E/L/ST/LDは変数削減で除外済み）
+    # パートタイム: N 禁止は変数削減で処理済み
+    # 3E では専従スタッフなし
+    # 夜勤専従代替不要（旧: 希望がない限り日勤(D)なし）
     for s in fulltime:
         if dedicated[s]:
             day_reqs = {d for d, t in requests.get(s, {}).items() if t == D}
@@ -1075,178 +1084,174 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                     prob += x[s, d, D] == 0
     # 時短スタッフ: D/N/SN/LDは変数削減で除外済み。早出・遅出は許可。
 
-    # 日勤最低人数（全体: 新人込み）— ソフト制約 + ハード下限
-    # 早出・遅出・時短・長日勤も日勤系としてカウント
-    day_short = {}
-    _hard_min_day = max(2, min_day - 1)
+    # ================================================================
+    # 3E: 遅出制約
+    # ================================================================
+    # 遅出(L) は1日1名固定（can_late=Trueのスタッフのみ）
+    late_short = {}
     for d in days:
-        day_sum = pulp.lpSum(x[s, d, t] for s in names for t in DAY_SHIFTS)
-        ds = pulp.LpVariable(f"day_short_{d}", lowBound=0)
-        prob += ds >= min_day - day_sum
-        day_short[d] = ds
-        prob += day_sum >= _hard_min_day
+        late_sum = pulp.lpSum(x[s, d, L] for s in late_pool) if late_pool else pulp.lpSum([])
+        # ハード: 遅出は必ず1名
+        if late_pool:
+            prob += late_sum == 1
+        # 遅出の翌日: 休(O) か 夜勤(N) のみ
+        if d < num_days - 1:
+            for s in late_pool:
+                prob += x[s, d, L] + pulp.lpSum(
+                    x[s, d+1, t] for t in SHIFTS if t not in [O, N]
+                ) <= 1
 
-    # 日勤最低人数（新人除く）— 経験者のみのハード制約
+    # ================================================================
+    # 3E: ユニット割り当て変数
+    # ================================================================
+    # ud[s, d, unit]: 日勤(D)スタッフのユニット割り当て
+    # un[s, d, unit]: 夜勤(N)スタッフのユニット割り当て
+    ud_keys = [(s, d, u) for s in names for d in days for u in DAY_UNITS]
+    un_keys = [(s, d, u) for s in names for d in days for u in NIGHT_UNITS]
+    ud = pulp.LpVariable.dicts("ud", ud_keys, cat=pulp.LpBinary)
+    un = pulp.LpVariable.dicts("un", un_keys, cat=pulp.LpBinary)
+
+    # 日勤者はユニット割り当てを1つ持つ (遅出はユニット外・独立)
+    for s in names:
+        for d in days:
+            prob += pulp.lpSum(ud[s, d, u] for u in DAY_UNITS) == x[s, d, D]
+
+    # 夜勤者はユニット割り当てを1つ持つ
+    for s in names:
+        for d in days:
+            prob += pulp.lpSum(un[s, d, u] for u in NIGHT_UNITS) == x[s, d, N]
+
+    # ── クラス別ユニット配置制約 ──
+    # リーダー(共通リーダー)資格: CLS_ERL or CLS_LDR のみ
+    non_leader = [s for s in names if classes[s] not in (CLS_ERL, CLS_LDR)]
+    for s in non_leader:
+        for d in days:
+            prob += ud[s, d, UNIT_LEAD] == 0
+            prob += un[s, d, UNIT_LEAD] == 0
+
+    # HCU配置不可: 病棟可(CLS_WD)のみ HCU禁止
+    wd_only = [s for s in names if classes[s] == CLS_WD]
+    for s in wd_only:
+        for d in days:
+            prob += ud[s, d, UNIT_HCU] == 0
+            prob += ud[s, d, UNIT_ER]  == 0
+            prob += un[s, d, UNIT_HCU] == 0
+
+    # HCU可(CLS_HCU): ER禁止（ERリーダー不在の通常ルール; ER leader強制でER可になる）
+    hcu_only = [s for s in names if classes[s] == CLS_HCU]
+    for s in hcu_only:
+        for d in days:
+            prob += ud[s, d, UNIT_ER] == 0
+
+    # リーダー(CLS_LDR): ER配置不可（ERリーダー資格なし）
+    ldr_only = [s for s in names if classes[s] == CLS_LDR]
+    for s in ldr_only:
+        for d in days:
+            prob += ud[s, d, UNIT_ER] == 0
+
+    # ================================================================
+    # 3E: 日次配置人数制約（平日 vs 休日）
+    # ================================================================
+    # 休日判定: 土日 or 祝日
+    rest_days_set = weekends | holidays  # 土日 + 祝日（day number 1-indexed）
+
+    day_short = {}  # ソフト不足変数（コンソール表示用）
+    for d in days:
+        day_num = d + 1
+        is_rest = day_num in rest_days_set
+
+        ward_sum  = pulp.lpSum(ud[s, d, UNIT_WD]   for s in names)
+        hcu_sum   = pulp.lpSum(ud[s, d, UNIT_HCU]  for s in names)
+        er_sum    = pulp.lpSum(ud[s, d, UNIT_ER]   for s in names)
+        lead_sum  = pulp.lpSum(ud[s, d, UNIT_LEAD] for s in names)
+
+        # 共通リーダーは毎日1名（平日・休日とも）
+        prob += lead_sum == 1
+
+        if is_rest:
+            # 休日: 病棟≥min_ward_hd, HCU≥min_hcu_hd, ER=0
+            ds_w = pulp.LpVariable(f"ds_ward_hd_{d}", lowBound=0)
+            prob += ds_w >= min_ward_hd - ward_sum
+            day_short[("ward_hd", d)] = ds_w
+            prob += ward_sum >= max(1, min_ward_hd - 1)
+
+            ds_h = pulp.LpVariable(f"ds_hcu_hd_{d}", lowBound=0)
+            prob += ds_h >= min_hcu_hd - hcu_sum
+            day_short[("hcu_hd", d)] = ds_h
+            prob += hcu_sum >= max(1, min_hcu_hd - 1)
+
+            prob += er_sum == 0  # 休日はER配置なし
+        else:
+            # 平日: 病棟≥min_ward_wd, HCU≥min_hcu_wd, ER≥min_er_wd
+            ds_w = pulp.LpVariable(f"ds_ward_wd_{d}", lowBound=0)
+            prob += ds_w >= min_ward_wd - ward_sum
+            day_short[("ward_wd", d)] = ds_w
+            prob += ward_sum >= max(1, min_ward_wd - 1)
+
+            ds_h = pulp.LpVariable(f"ds_hcu_wd_{d}", lowBound=0)
+            prob += ds_h >= min_hcu_wd - hcu_sum
+            day_short[("hcu_wd", d)] = ds_h
+            prob += hcu_sum >= max(1, min_hcu_wd - 1)
+
+            ds_e = pulp.LpVariable(f"ds_er_wd_{d}", lowBound=0)
+            prob += ds_e >= min_er_wd - er_sum
+            day_short[("er_wd", d)] = ds_e
+            prob += er_sum >= max(1, min_er_wd - 1)
+
+            # ER: ERリーダー(CLS_ERL)を必ず1名以上配置
+            prob += pulp.lpSum(ud[s, d, UNIT_ER] for s in erl_staff) >= 1
+
+    # ================================================================
+    # 3E: 夜勤ユニット制約（病棟2・HCU1・リーダー1 = 計4名）
+    # ================================================================
+    for d in days:
+        prob += pulp.lpSum(x[s, d, N] for s in names) == night_count  # 夜勤4名固定
+        prob += pulp.lpSum(un[s, d, UNIT_WD]   for s in names) == 2
+        prob += pulp.lpSum(un[s, d, UNIT_HCU]  for s in names) == 1
+        prob += pulp.lpSum(un[s, d, UNIT_LEAD] for s in names) == 1
+
+    # 夜勤リーダーは leader_pool から
+    non_night_leader = [s for s in names if s not in leader_pool]
+    for s in non_night_leader:
+        for d in days:
+            prob += un[s, d, UNIT_LEAD] == 0
+
+    print(f"  夜勤: 4名固定（病棟2+HCU1+リーダー1）")
+    print(f"  遅出可能スタッフ: {len(late_pool)}名")
+    print(f"  平日日勤: 病棟≥{min_ward_wd}, HCU≥{min_hcu_wd}, ER≥{min_er_wd}+ERリーダー1")
+    print(f"  休日日勤: 病棟≥{min_ward_hd}, HCU≥{min_hcu_hd}, ER=0")
+
+    # day_short_excl は3Eでは未使用（新人制度なし）
     day_short_excl = {}
-    if new_hire_staff and min_day_excl > 0:
-        for d in days:
-            # その日、新人でないスタッフの日勤系合計
-            non_nh = [s for s in names if not is_new_hire_on(s, d)]
-            if non_nh:
-                day_sum_excl = pulp.lpSum(x[s, d, t] for s in non_nh for t in DAY_SHIFTS)
-                ds_e = pulp.LpVariable(f"day_short_excl_{d}", lowBound=0)
-                prob += ds_e >= min_day_excl - day_sum_excl
-                day_short_excl[d] = ds_e
-                # ハード下限: min_day_excl - 1
-                prob += day_sum_excl >= max(1, min_day_excl - 1)
-        print(f"  日勤最低(新人除く): {min_day_excl}人/日 (対象{len([s for s in names if not new_hire_map.get(s)])}人)")
-    # 夜勤人数: 夜勤(N) + 短夜勤(SN) の合計
-    # --- 夜勤研修モデル ---
-    # 研修スタッフは通常メンバーとして夜勤に入る。
-    # 最初のN回は研修（3人目追加枠）、残りは通常2人枠。
-    # train_flag[s,d]=1 → その日の夜勤は研修扱い（3人目、通常枠に含めない）
-    train_flag = {}
-    if training_staff:
-        for s in training_staff:
-            for d in days:
-                train_flag[s, d] = pulp.LpVariable(f"tf_{s}_{d}", cat=pulp.LpBinary)
-                # 夜勤に入っていない日は研修フラグ不可
-                prob += train_flag[s, d] <= pulp.lpSum(x[s, d, t] for t in NIGHT_SHIFTS)
-        # 研修回数
-        for s in training_staff:
-            nt_max = night_training_max_map.get(s)
-            if nt_max is not None:
-                prob += pulp.lpSum(train_flag[s, d] for d in days) == nt_max
-            else:
-                prob += pulp.lpSum(train_flag[s, d] for d in days) >= 1
-        # 研修者同日重複なし（3人目枠は1人/日）
-        for d in days:
-            prob += pulp.lpSum(train_flag[s, d] for s in training_staff) <= 1
-        # 通常夜勤人数 = 全夜勤 - 研修フラグ分 = night_count
-        for d in days:
-            prob += (pulp.lpSum(x[s, d, t] for s in names for t in NIGHT_SHIFTS)
-                     - pulp.lpSum(train_flag[s, d] for s in training_staff)) == night_count
-        # 順序制約: 研修夜勤は先（日付順）、通常夜勤は後
-        # 「通常夜勤(d1) の後に研修夜勤(d2) は不可」(d1 < d2)
-        for s in training_staff:
-            for d1 in days:
-                for d2 in days:
-                    if d1 < d2:
-                        # x[s,d1,N]-flag[d1]=通常夜勤d1, flag[d2]=研修夜勤d2 → 両立不可
-                        prob += (pulp.lpSum(x[s, d1, t] for t in NIGHT_SHIFTS)
-                                 - train_flag[s, d1] + train_flag[s, d2] <= 1)
-        print(f"  夜勤研修: {len(training_staff)}名 → 最初のN回=3人夜勤、残り=通常2人夜勤")
-    else:
-        for d in days:
-            prob += pulp.lpSum(x[s, d, t] for s in names for t in NIGHT_SHIFTS) == night_count
-    # 夜勤Min/Max + 均等配分
-    # Min=ハード制約（最低回数）、残り枠を均等配分、Max=ソフト制約
-    ft_non_ded = [s for s in fulltime if not dedicated[s]]
-    ft_min_total = sum((night_min[s] or 0) for s in ft_non_ded if night_min[s] is not None)
-    ft_slots = night_count * num_days
-    ded_slots = sum(
-        (night_max[s] if night_max[s] is not None else max_n_ded)
-        for s in fulltime if dedicated[s]
-    )
-    remaining_slots = ft_slots - ded_slots  # 専従以外で分配する枠
+    # ================================================================
+    # 3E: 夜勤Min/Max
+    # ================================================================
+    ft_non_ded = fulltime  # 3Eでは専従なし
+    ft_slots   = night_count * num_days
     if ft_non_ded:
-        even_target = remaining_slots / len(ft_non_ded)  # 均等配分の理想値
+        even_target = ft_slots / len(ft_non_ded)
     else:
         even_target = 0
-    print(f"  夜勤配分: 枠{ft_slots} - 専従{ded_slots} = 通常{remaining_slots}回"
-          f" ÷ {len(ft_non_ded)}人 ≒ {even_target:.1f}回/人")
-    if ft_min_total > remaining_slots:
-        print(f"⚠ 夜勤Min合計({ft_min_total}) > 通常枠({remaining_slots}) → Minはソフト制約で処理")
+    print(f"  夜勤配分: {ft_slots}枠 ÷ {len(ft_non_ded)}人 ≒ {even_target:.1f}回/人")
 
     night_min_miss = {}
     night_max_over = {}
     for s in fulltime:
-        # 夜勤系合計（N + SN）
-        total_n = pulp.lpSum(x[s, d, t] for d in days for t in NIGHT_SHIFTS)
-        if dedicated[s]:
-            # 専従: Max制約のみ（ハード）
-            s_max = night_max[s] if night_max[s] is not None else max_n_ded
-            prob += total_n <= s_max
-            continue
-        # 通常スタッフ: Min=ハード, Max=ソフト
+        total_n = pulp.lpSum(x[s, d, N] for d in days)
         s_min = night_min[s]
         s_max = night_max[s] if night_max[s] is not None else max_n_reg
-        # Min制約
         if s_min is not None:
-            if ft_min_total <= remaining_slots:
-                prob += total_n >= s_min  # ハード
-            else:
-                nm_var = pulp.LpVariable(f"nmin_miss_{s}", lowBound=0)
-                prob += nm_var >= s_min - total_n
-                night_min_miss[s] = nm_var
-        # Max制約: 0が明示指定されている場合はハード（完全禁止）、それ以外はソフト
+            prob += total_n >= s_min
         if night_max[s] is not None and night_max[s] == 0:
-            prob += total_n == 0  # ハード: 夜勤禁止
+            prob += total_n == 0
         else:
-            # ソフト: 超過にペナルティ
             nm_over = pulp.LpVariable(f"nmax_over_{s}", lowBound=0)
             prob += nm_over >= total_n - s_max
             night_max_over[s] = nm_over
-    # 72時間規制（日本看護協会ガイドライン）
-    # N=night_hours h, SN=12h として月合計時間を計算
-    # night_72h_mode: "strict"=ハード制約, "soft"=ペナルティ, "none"=チェックなし
-    sn_hours = 12  # 短夜勤は常に12h
-    night_72h_over = {}  # softモード用ペナルティ変数
-    if night_72h_mode in ("strict", "soft"):
-        for s in fulltime:
-            if dedicated[s]:
-                continue  # 夜勤専従は対象外
-            # 月合計夜勤時間 = N回数×night_hours + SN回数×12
-            total_h_expr = (night_hours * pulp.lpSum(x[s, d, N] for d in days)
-                            + sn_hours  * pulp.lpSum(x[s, d, SN] for d in days))
-            if night_72h_mode == "strict":
-                prob += total_h_expr <= 72
-            else:  # soft
-                v72 = pulp.LpVariable(f"n72over_{s}", lowBound=0)
-                prob += v72 >= total_h_expr - 72
-                night_72h_over[s] = v72
-        mode_label = "ハード制約" if night_72h_mode == "strict" else "ソフト制約"
-        print(f"  72時間規制: N×{night_hours}h + 準×{sn_hours}h ≦ 72h [{mode_label}]")
 
-    # ── 運用条件ルール（op_rules）──
-    if op_rules is None:
-        op_rules = {}
-    ld_sn_pen = {}  # 長日勤→翌日短夜勤ペナルティ変数（softモード用）
-    ld_consec_pen = {}  # 長日勤連続ペナルティ変数
-
-    # LD→SN（長日勤翌日の短夜勤）: strict=禁止, soft=ペナルティ, none=許可
-    ld_sn_mode = op_rules.get("ld_sn", "none")
-    if ld_sn_mode in ("strict", "soft"):
-        idx_ls = 0
-        for s in fulltime:
-            if dedicated[s]:
-                continue
-            for d in days[:-1]:
-                if ld_sn_mode == "strict":
-                    prob += x[s, d, LD] + x[s, d+1, SN] <= 1
-                else:
-                    v = pulp.LpVariable(f"ld_sn_{idx_ls}", cat=pulp.LpBinary)
-                    prob += v >= x[s, d, LD] + x[s, d+1, SN] - 1
-                    ld_sn_pen[idx_ls] = v
-                    idx_ls += 1
-        print(f"  LD→SN制約: [{ld_sn_mode}]")
-
-    # 長日勤連続禁止: strict=2連続禁止, soft=ペナルティ, none=許可
-    ld_consec_mode = op_rules.get("ld_consecutive", "none")
-    if ld_consec_mode in ("strict", "soft"):
-        idx_lc = 0
-        for s in names:
-            if dedicated.get(s) or short_time_map.get(s):
-                continue
-            for d in days[:-1]:
-                if ld_consec_mode == "strict":
-                    prob += x[s, d, LD] + x[s, d+1, LD] <= 1
-                else:
-                    v = pulp.LpVariable(f"ld_cc_{idx_lc}", cat=pulp.LpBinary)
-                    prob += v >= x[s, d, LD] + x[s, d+1, LD] - 1
-                    ld_consec_pen[idx_lc] = v
-                    idx_lc += 1
-        print(f"  長日勤連続制約: [{ld_consec_mode}]")
+    night_72h_over = {}  # 3Eでは未使用（互換変数）
+    ld_sn_pen = {}
+    ld_consec_pen = {}
 
     for s in parttime:
         for d in days:
@@ -1319,129 +1324,35 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             prob += pulp.lpSum(
                 x[s, d+i, D] + x[s, d+i, N] + x[s, d+i, R] for i in range(limit + 1)
             ) <= limit
-    # ── Tier ベースの夜勤ペア制約（ハード） ──
-    # C族 (C+ + 通常C) の同日夜勤は1人まで（C+C, C+C+, C+C+通常 いずれも禁止）
-    c_family = cp_staff + c_staff
-    if c_family:
-        for d in days:
-            c_fam_eff = [s for s in c_family if not is_new_hire_on(s, d)]
-            if c_fam_eff:
-                prob += pulp.lpSum(x[s, d, t] for s in c_fam_eff for t in NIGHT_SHIFTS) <= 1
-    # B同日夜勤は1人まで（B+B禁止）
-    if b_staff:
-        for d in days:
-            b_eff = [s for s in b_staff if not is_new_hire_on(s, d)]
-            if b_eff:
-                prob += pulp.lpSum(x[s, d, t] for s in b_eff for t in NIGHT_SHIFTS) <= 1
-    # B + C族 同日夜勤禁止（ハード: 経験不足ペア禁止）
-    if b_staff and c_family:
-        for d in days:
-            b_eff = [s for s in b_staff if not is_new_hire_on(s, d)]
-            c_fam_eff = [s for s in c_family if not is_new_hire_on(s, d)]
-            if b_eff and c_fam_eff:
-                prob += (pulp.lpSum(x[s, d, t] for s in b_eff for t in NIGHT_SHIFTS)
-                         + pulp.lpSum(x[s, d, t] for s in c_fam_eff for t in NIGHT_SHIFTS)) <= 1
+    # 3E: Tierペア制約なし（クラス制度ではペアリングルール不要）
+    # 日勤リーダー制約はユニット割り当て（UNIT_LEAD）で既に対応済み
 
-    # ── リーダー制約（ハード） ──
-    # 日勤リーダー: A全員（時短/週勤務問わず Tier=A は日勤L単独可）が日勤系に1人以上
-    if day_leader_pool:
-        for d in days:
-            dl_eff = [s for s in day_leader_pool if not is_new_hire_on(s, d)]
-            if dl_eff:
-                prob += pulp.lpSum(x[s, d, t] for s in dl_eff for t in DAY_SHIFTS) >= 1
-    # 夜勤リーダー: A+AB かつ夜勤可能者が夜勤系に1人以上
-    if night_leader_pool:
-        for d in days:
-            nl_eff = [s for s in night_leader_pool if not is_new_hire_on(s, d)]
-            if nl_eff:
-                prob += pulp.lpSum(x[s, d, t] for s in nl_eff for t in NIGHT_SHIFTS) >= 1
-
-    # ── 委員会バックアップ制約（ハード） ──
-    # 委員会(I)の人は勤務時間中に離席 → 当日純粋日勤系にA or AB（委員会以外）が1人以上必要
-    # 委員会がない日はこの制約は自動的に緩和される（従来通り）
-    ab_or_a_pool = [s for s in (a_staff + ab_staff)]
-    if ab_or_a_pool:
-        n_names = max(1, len(names))
-        for d in days:
-            # その日の委員会人数
-            committee_d = pulp.lpSum(x[s, d, I] for s in names)
-            # 当日のA/AB（新人除く）× 純粋日勤系（委=離席枠を除く）
-            aa_eff = [s for s in ab_or_a_pool if not is_new_hire_on(s, d)]
-            backup_d = pulp.lpSum(x[s, d, t] for s in aa_eff for t in PURE_DAY_SHIFTS)
-            # committee_d >= 1 のとき backup_d >= 1 を強制
-            # backup_d * n_names >= committee_d : int backup_d は committee_d >= 1 で自動的に 1 以上
-            prob += backup_d * n_names >= committee_d
-
-    # ── 新人/研修が夜勤に入る日はA(夜勤リーダー資格者)必須（ハード） ──
-    # 新人の夜勤参加時はA不在不可
-    if a_night_leader and new_hire_staff:
-        for d in days:
-            nh_eff = [s for s in new_hire_staff if is_new_hire_on(s, d)]
-            if not nh_eff:
-                continue
-            # その日に新人が夜勤系に入っているか
-            nh_night_sum = pulp.lpSum(x[s, d, t] for s in nh_eff for t in NIGHT_SHIFTS)
-            a_night_sum = pulp.lpSum(x[s, d, t] for s in a_night_leader for t in NIGHT_SHIFTS)
-            # 新人が夜勤 → A夜勤 >= 1
-            # num_staff 上限を係数に用いず、シンプルに: a_night_sum >= nh_night_sum / len(nh_eff)
-            # 整数化: a_night_sum * len(nh_eff) >= nh_night_sum は弱い。
-            # 強制化: 新人夜勤者が1名以上いる日 → A夜勤必須
-            # => nh_night_sum <= M * a_night_sum （M=新人数）
-            prob += nh_night_sum <= len(nh_eff) * a_night_sum
-    # 研修夜勤時もA必須
-    if a_night_leader and training_staff:
-        for d in days:
-            tr_night_sum = pulp.lpSum(x[s, d, t] for s in training_staff for t in NIGHT_SHIFTS)
-            a_night_sum = pulp.lpSum(x[s, d, t] for s in a_night_leader for t in NIGHT_SHIFTS)
-            prob += tr_night_sum <= max(1, len(training_staff)) * a_night_sum
-
-    # 休暇(V)は希望がある日のみ — それ以外は禁止
+    # 休暇(V)は希望がある日のみ
     for s in names:
         vac_set = vacation_days.get(s, set())
         for d in days:
             if d not in vac_set:
                 prob += x[s, d, V] == 0
 
-    # 委員会(I)は希望がある日のみ — それ以外は禁止（管理者割当のみ）
-    committee_days = {}  # {staff_name: set of day_indices}
-    for s, reqs_s in requests.items():
-        if s not in names:
-            continue
-        for day_num, shift_type in reqs_s.items():
-            if shift_type == I and 1 <= day_num <= num_days:
-                committee_days.setdefault(s, set()).add(day_num - 1)
+    # 委員会(I)は3Eでは無効化（全員禁止）
     for s in names:
-        cs = committee_days.get(s, set())
         for d in days:
-            if d not in cs:
-                prob += x[s, d, I] == 0
+            prob += x[s, d, I] == 0
 
-    # 公休日数制約（フルタイム全スタッフ：通常+専従）
-    # 公休 = 休(O) の日数を公休日数に合わせる（ハード制約）
-    # 休暇(V)・明(A) は公休にカウントしない → 休(O) = public_off が目標
+    # 公休日数制約（フルタイム全スタッフ）
     public_off_alerts = []
     for s in fulltime:
         v_count = len(vacation_days.get(s, set()))
-        # 勤務可能日数 = 全日数 - 休暇日数
         work_possible = num_days - v_count
-        # 公休(O)の目標 = public_off（休暇分は別枠）
-        target_off = public_off
-        # 最低限必要な勤務日: 専従は夜+明セット、通常は夜勤Min×2
-        if dedicated[s]:
-            # 専従: 夜勤Max回の夜+明 = Max×2日は最低勤務
-            ded_max = night_max[s] if night_max[s] is not None else max_n_ded
-            min_work_needed = ded_max  # 夜勤回数分（明は休にカウントしない）
-        else:
-            min_work_needed = (night_min[s] or 0) * 2
+        target_off    = public_off
+        min_work_needed = (night_min[s] or 0) * 2  # 夜勤Min×2（夜+明）
         max_off_possible = work_possible - min_work_needed
         if target_off > max_off_possible:
-            label = "専従" if dedicated[s] else "通常"
             public_off_alerts.append(
-                f"  ⚠ {s}({label}): 公休{target_off}日は確保不可"
+                f"  ⚠ {s}: 公休{target_off}日は確保不可"
                 f"（勤務可能{work_possible}日, 最低勤務{min_work_needed}日"
                 f" → 最大休{max_off_possible}日）")
         total_o = pulp.lpSum(x[s, d, O] for d in days)
-        # ハード制約: 公休日数ぴったり（±0〜1）
         prob += total_o >= target_off
         prob += total_o <= target_off + 1
 
@@ -1449,7 +1360,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         print(f"\n⚠ 公休日数アラート:")
         for alert in public_off_alerts:
             print(alert)
-        print(f"  → Infeasibleの原因になる可能性があります。公休日数を減らすか希望を見直してください。\n")
+        print(f"  → Infeasibleの原因になる可能性があります。\n")
 
     # 勤務希望（ソフト制約）+ 夜不（ハード制約）
     req_miss = {}
@@ -1468,40 +1379,41 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                 elif shift_type == "明休":
                     # 明または休: ハード制約（明 or 休のどちらか）
                     prob += x[s, d_idx, A] + x[s, d_idx, O] >= 1
-                elif shift_type == R:
-                    # 研修: ハード制約（勤務日数に含むが日勤人数には含めない）
-                    prob += x[s, d_idx, R] == 1
-                elif shift_type == I:
-                    # 委員会: ハード制約（日勤人数にカウント、但しA/ABバックアップ必須）
-                    prob += x[s, d_idx, I] == 1
+                elif shift_type == "遅希":
+                    # 遅出希望: ソフト制約（can_late フラグが必要）
+                    if can_late.get(s):
+                        key = (s, d_idx)
+                        req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
+                        prob += x[s, d_idx, L] + req_miss[key] >= 1
+                    # can_late=False のスタッフは遅出不可のため無視
+                elif shift_type in (R, I):
+                    pass  # 3Eでは研修・委員会なし、無視
                 else:
                     key = (s, d_idx)
                     req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
                     prob += x[s, d_idx, shift_type] + req_miss[key] >= 1
 
     # --- ソフト制約 ---
+    # 3E: 夜勤リーダー欠如ペナルティ（leader_pool からリーダー夜勤が入るか）
     a_miss = pulp.LpVariable.dicts("a_miss", days, cat=pulp.LpBinary)
-    if a_staff:
-        a_ft = [n for n in a_staff if weekly[n] is None]
+    if leader_pool:
+        ldr_ft = [n for n in leader_pool if weekly[n] is None]
         for d in days:
-            # 新人期間中のAは「独立したAリーダー」としてカウントしない
-            a_ft_eff = [s for s in a_ft if not is_new_hire_on(s, d)]
-            if a_ft_eff:
-                # N または SN どちらかにAスタッフが入っていればOK
-                prob += pulp.lpSum(x[s, d, t] for s in a_ft_eff for t in NIGHT_SHIFTS) + a_miss[d] >= 1
+            if ldr_ft:
+                prob += pulp.lpSum(x[s, d, N] for s in ldr_ft) + a_miss[d] >= 1
             else:
                 prob += a_miss[d] == 1
     else:
         for d in days:
             prob += a_miss[d] == 1
 
-    # 夜勤均等配分: 夜勤系(N+SN)の合計で均等化
+    # 夜勤均等配分
     night_dev = {}
     if ft_non_ded:
         n_max_var = pulp.LpVariable("n_eq_max", lowBound=0)
         n_min_var = pulp.LpVariable("n_eq_min", lowBound=0, upBound=num_days)
         for s in ft_non_ded:
-            total = pulp.lpSum(x[s, d, t] for d in days for t in NIGHT_SHIFTS)
+            total = pulp.lpSum(x[s, d, N] for d in days)
             prob += n_max_var >= total
             prob += n_min_var <= total
     else:
@@ -1509,67 +1421,15 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         n_min_var = pulp.LpVariable("n_eq_min", lowBound=0)
         prob += n_max_var == 0
         prob += n_min_var == 0
-    # 専従の推奨値偏差
-    for s in fulltime:
-        if dedicated[s]:
-            pref = pref_n_ded
-            night_dev[s] = pulp.LpVariable(f"ndev_{s}", lowBound=0)
-            total = pulp.lpSum(x[s, d, N] for d in days)
-            prob += night_dev[s] >= total - pref
-            prob += night_dev[s] >= pref - total
 
-    # ── AB夜勤ペア ソフトペナルティ ──
-    # 優先順位（重い方が避けられる）:
-    #   AB + 通常C  = 200  （強く避ける: 経験不足ペア）
-    #   AB + B      = 100  （避ける）
-    #   AB + AB     = 100  （A不在の代替だが避ける）
-    #   AB + C+     =  50  （許容範囲・軽くペナルティ）
-    #
-    # N, SNいずれも対象。ABが2人同日夜勤 or ABとB/C族がペアの場合にペナルティ。
-    ab_c_pen  = {}  # AB + 通常C
-    ab_b_pen  = {}  # AB + B
-    ab_ab_pen = {}  # AB + AB
-    ab_cp_pen = {}  # AB + C+
-    if ab_staff:
-        for d in days:
-            ab_eff = [s for s in ab_staff if not is_new_hire_on(s, d)]
-            b_eff  = [s for s in b_staff  if not is_new_hire_on(s, d)]
-            cp_eff = [s for s in cp_staff if not is_new_hire_on(s, d)]
-            c_eff  = [s for s in c_staff  if not is_new_hire_on(s, d)]
-            if not ab_eff:
-                continue
-            ab_n = pulp.lpSum(x[s, d, t] for s in ab_eff for t in NIGHT_SHIFTS)
-
-            # AB + 通常C （ハードC族同日≤1制約と整合: ABが夜にいる日にCも夜 → penalty 200）
-            if c_eff:
-                c_n = pulp.lpSum(x[s, d, t] for s in c_eff for t in NIGHT_SHIFTS)
-                v = pulp.LpVariable(f"ab_c_{d}", cat=pulp.LpBinary)
-                prob += v >= ab_n + c_n - 1
-                ab_c_pen[d] = v
-            # AB + B
-            if b_eff:
-                b_n = pulp.lpSum(x[s, d, t] for s in b_eff for t in NIGHT_SHIFTS)
-                v = pulp.LpVariable(f"ab_b_{d}", cat=pulp.LpBinary)
-                prob += v >= ab_n + b_n - 1
-                ab_b_pen[d] = v
-            # AB + AB（同日ABが2人以上）
-            v = pulp.LpVariable(f"ab_ab_{d}", lowBound=0)
-            prob += v >= ab_n - 1
-            ab_ab_pen[d] = v
-            # AB + C+
-            if cp_eff:
-                cp_n = pulp.lpSum(x[s, d, t] for s in cp_eff for t in NIGHT_SHIFTS)
-                v = pulp.LpVariable(f"ab_cp_{d}", cat=pulp.LpBinary)
-                prob += v >= ab_n + cp_n - 1
-                ab_cp_pen[d] = v
-
+    # 推奨連勤超過ペナルティ
     cp = {}
     idx = 0
     for s in names:
         for d in range(num_days - pref_consec):
             cp[idx] = pulp.LpVariable(f"cp_{idx}", cat=pulp.LpBinary)
             prob += pulp.lpSum(
-                x[s, d+i, D] + x[s, d+i, N] + x[s, d+i, R] for i in range(pref_consec + 1)
+                x[s, d+i, D] + x[s, d+i, N] + x[s, d+i, L] for i in range(pref_consec + 1)
             ) - pref_consec <= cp[idx]
             idx += 1
 
@@ -1598,60 +1458,39 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     third = num_days // 3
     periods = [list(range(0, third)), list(range(third, 2*third)), list(range(2*third, num_days))]
     for s in fulltime:
-        if dedicated[s]:
-            continue  # 専従はサイクルで自然に分散
         for i in range(len(periods)):
             for j in range(i+1, len(periods)):
                 night_spread[ns_idx] = pulp.LpVariable(f"nsprd_{ns_idx}", lowBound=0)
-                ni = pulp.lpSum(x[s, d, t] for d in periods[i] for t in NIGHT_SHIFTS)
-                nj = pulp.lpSum(x[s, d, t] for d in periods[j] for t in NIGHT_SHIFTS)
+                ni = pulp.lpSum(x[s, d, N] for d in periods[i])
+                nj = pulp.lpSum(x[s, d, N] for d in periods[j])
                 prob += night_spread[ns_idx] >= ni - nj
                 prob += night_spread[ns_idx] >= nj - ni
                 ns_idx += 1
 
-    # 目的関数
-    # 優先順位（重い順に違反しにくい）:
-    #   P0 A夜勤欠            300  - 夜勤リーダー不在は極力回避
-    #   P1 希望未達            250  - スタッフ希望を尊重（ハード近似）
-    #   P0 日勤最低人数(全体)   200  - 当日の運営人数
-    #   P0 日勤最低(新人除く)  200  - 経験者の確保
-    #   P2 AB+通常C夜勤ペア    200  - 経験不足ペア
-    #   P3 AB+B夜勤ペア        100  - 中経験ペア
-    #   P3 AB+AB夜勤ペア       100  - A不在代替
-    #   P4 AB+C+夜勤ペア        50  - C+既卒ペア（許容）
-    #   P5 夜勤均等              60
-    #   72h超過                  35
-    #   Max超過                  25
-    #   専従推奨偏差             10
-    #   公休均等              8
-    #   推奨連勤超過          3
-    #   専従単休              4
-    #   夜勤分散              6
+    # ユニット配置不足ペナルティ
+    unit_short_vars = list(day_short.values())
+
+    # 目的関数 (3E版)
+    # P0 夜勤リーダー欠      300
+    # P1 希望未達            250
+    # P0 ユニット人数不足    200
+    # P2 夜勤Max超過          25
+    # P3 夜勤均等             60
+    # P4 夜勤分散              6
+    # P5 推奨連勤超過          3
+    # P6 公休均等              8
     obj = (
-        300 * pulp.lpSum(a_miss[d] for d in days)         # A夜勤リーダー欠 (P0)
-        + 250 * pulp.lpSum(req_miss[k] for k in req_miss)   # 希望未達 (P1)
-        + 200 * pulp.lpSum(day_short[d] for d in days)      # 日勤最低人数不足・全体 (P0)
-        + 200 * pulp.lpSum(day_short_excl[d] for d in day_short_excl)  # 新人除く不足 (P0)
-        + 200 * pulp.lpSum(ab_c_pen[d] for d in ab_c_pen)   # AB+通常C (P2)
-        + 100 * pulp.lpSum(ab_b_pen[d] for d in ab_b_pen)   # AB+B (P3)
-        + 100 * pulp.lpSum(ab_ab_pen[d] for d in ab_ab_pen) # AB+AB (P3)
-        +  50 * pulp.lpSum(ab_cp_pen[d] for d in ab_cp_pen) # AB+C+ (P4)
-        +  60 * (n_max_var - n_min_var)                     # 夜勤均等
-        +  35 * pulp.lpSum(night_72h_over[s] for s in night_72h_over)
+        300 * pulp.lpSum(a_miss[d] for d in days)
+        + 250 * pulp.lpSum(req_miss[k] for k in req_miss)
+        + 200 * pulp.lpSum(unit_short_vars)
         +  25 * pulp.lpSum(night_max_over[s] for s in night_max_over)
-        +  10 * pulp.lpSum(night_dev[s] for s in night_dev)
-        +   8 * (max_off - min_off)
-        +   3 * pulp.lpSum(cp[i] for i in cp)
-        +   4 * pulp.lpSum(ded_single_off[i] for i in ded_single_off)
+        +  60 * (n_max_var - n_min_var)
         +   6 * pulp.lpSum(night_spread[i] for i in night_spread)
+        +   3 * pulp.lpSum(cp[i] for i in cp)
+        +   8 * (max_off - min_off)
     )
     if night_min_miss:
         obj += 40 * pulp.lpSum(night_min_miss[s] for s in night_min_miss)
-    if ld_sn_pen:
-        obj += 30 * pulp.lpSum(ld_sn_pen[i] for i in ld_sn_pen)
-    if ld_consec_pen:
-        obj += 20 * pulp.lpSum(ld_consec_pen[i] for i in ld_consec_pen)
-    # (研修夜勤回数はハード制約で管理、ソフトペナルティ不要)
     prob += obj
 
     # ============================================================
@@ -1714,27 +1553,44 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             nd_max_v = max(nd_counts.values())
             print(f"  夜勤均等(N+準): {nd_min_v}〜{nd_max_v}回 (差{nd_max_v - nd_min_v})")
 
-        # 新人情報（日ごとの判定関数の結果をmapに展開して保存）
-        new_hire_days = {}  # {staff_name: set of day_num (1-indexed) 新人扱いの日}
+        # 3E: 新人なし
+        new_hire_days = {}
+
+        # ユニット割り当て結果の取得
+        unit_day = {}   # {staff: [unit_per_day]} (D シフトのみ)
+        unit_night = {} # {staff: [unit_per_night]} (N シフトのみ)
         for s in names:
-            if new_hire_map.get(s):
-                nh_set = set()
-                for d_idx in range(num_days):
-                    if is_new_hire_on(s, d_idx):
-                        nh_set.add(d_idx + 1)
-                new_hire_days[s] = nh_set
+            ud_row = []
+            un_row = []
+            for d in days:
+                if schedule[s][d] == D:
+                    assigned = next((u for u in DAY_UNITS if pulp.value(ud[s, d, u]) > 0.5), "?")
+                else:
+                    assigned = ""
+                ud_row.append(assigned)
+                if schedule[s][d] == N:
+                    assigned_n = next((u for u in NIGHT_UNITS if pulp.value(un[s, d, u]) > 0.5), "?")
+                else:
+                    assigned_n = ""
+                un_row.append(assigned_n)
+            unit_day[s]   = ud_row
+            unit_night[s] = un_row
 
         result = {
-            "schedule": schedule, "names": names, "tiers": tiers,
+            "schedule": schedule, "names": names, "tiers": classes,
+            "classes": classes,
             "num_days": num_days, "year": year, "month": month,
             "settings": settings, "requests": requests,
             "holidays": holidays, "weekends": weekends,
             "public_off": public_off, "weekly": weekly,
-            "dedicated": dedicated, "short_time": short_time_map,
+            "dedicated": {n: False for n in names},
+            "short_time": {n: False for n in names},
             "missed_requests": missed_requests,
-            "new_hire_days": new_hire_days,
-            "new_hire_map": dict(new_hire_map),
-            "new_hire_grad_map": dict(new_hire_grad_map),
+            "new_hire_days": {},
+            "new_hire_map": {n: False for n in names},
+            "new_hire_grad_map": {n: None for n in names},
+            "unit_day": unit_day,
+            "unit_night": unit_night,
             "pattern_num": pat_num,
         }
         all_results.append(result)
@@ -1744,11 +1600,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             current_night = {}
             for s in fulltime:
                 for d in days:
-                    current_night[(s, d)] = 1 if schedule[s][d] in NIGHT_SHIFTS else 0
-
+                    current_night[(s, d)] = 1 if schedule[s][d] == N else 0
             prev_solutions.append(current_night)
-
-            # 各過去パターンと min_diff 以上の差を要求
             for p_idx, prev_night in enumerate(prev_solutions):
                 diff_expr = pulp.lpSum(
                     x[s, d, N] * (1 - prev_night[(s, d)])
@@ -1763,11 +1616,11 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
 def _print_result(pat_num, schedule, names, tiers, weekly, parttime,
                   days, holidays, weekends, public_off, min_day, min_day_excl,
                   a_miss, missed, day_short, day_short_excl, year, month):
-    """1パターンのコンソール出力"""
+    """1パターンのコンソール出力（3E版）"""
     print(f"\n{'='*55}")
     print(f"  パターン {pat_num} - スタッフ別統計 (公休{public_off}日)")
     print(f"{'='*55}")
-    hdr = f"{'名前':>6} {'Tier':>4} {'日':>3} {'夜':>3} {'準':>3} {'明':>3} {'早':>3} {'遅':>3} {'長':>3} {'短':>3} {'休':>3} {'研':>3} {'暇':>3} {'公休':>4}"
+    hdr = f"{'名前':>8} {'クラス':>8} {'日':>3} {'夜':>3} {'遅':>3} {'明':>3} {'休':>3} {'暇':>3} {'公休':>4}"
     if parttime:
         hdr += f" {'週':>3}"
     print(hdr)
@@ -1775,16 +1628,17 @@ def _print_result(pat_num, schedule, names, tiers, weekly, parttime,
     for s in names:
         c = {t: schedule[s].count(t) for t in SHIFTS}
         ko = c[O] + c[V]
-        line = (f"{s:>6} {tiers[s]:>4} {c[D]:>3} {c[N]:>3} {c[SN]:>3} {c[A]:>3}"
-                f" {c[E]:>3} {c[L]:>3} {c[LD]:>3} {c[ST]:>3} {c[O]:>3} {c[R]:>3} {c[V]:>3} {ko:>4}")
+        cls_abbr = tiers[s][:4] if tiers[s] else "?"
+        line = (f"{s:>8} {cls_abbr:>8} {c[D]:>3} {c[N]:>3} {c[L]:>3} {c[A]:>3}"
+                f" {c[O]:>3} {c[V]:>3} {ko:>4}")
         if parttime:
-            w = weekly[s]
+            w = weekly.get(s)
             line += f" {f'週{w}' if w else '':>4}"
         print(line)
 
     weekdays_jp = ["月", "火", "水", "木", "金", "土", "日"]
     first_wd = date(year, month, 1).weekday()
-    print(f"\n  日別夜勤ペア:")
+    print(f"\n  日別夜勤4名（病棟2+HCU1+リーダー1）:")
     for d in days:
         wd = weekdays_jp[(first_wd + d) % 7]
         hol = "祝" if (d+1) in holidays else ("★" if (d+1) in weekends else "")
@@ -1793,24 +1647,7 @@ def _print_result(pat_num, schedule, names, tiers, weekly, parttime,
         print(f"    {d+1:>2} {wd}{hol:1} [{ns}]")
 
     miss = [d+1 for d in days if pulp.value(a_miss[d]) > 0.5]
-    print(f"\n  {'△ AB代行: '+str(miss) if miss else '✓ 全日Aリーダー配置'}")
-    # 日勤不足の日
-    if day_short:
-        short_days = [(d+1, pulp.value(day_short[d])) for d in days
-                      if day_short[d] is not None and pulp.value(day_short[d]) > 0.5]
-        if short_days:
-            sd_str = ", ".join(f"{d}日(-{int(v)})" for d, v in short_days)
-            print(f"  ⚠ 日勤不足: {sd_str} (目標{min_day}人)")
-        else:
-            print(f"  ✓ 日勤最低{min_day}人達成（全体）")
-    if day_short_excl:
-        short_excl = [(d+1, pulp.value(day_short_excl[d])) for d in day_short_excl
-                      if pulp.value(day_short_excl[d]) > 0.5]
-        if short_excl:
-            se_str = ", ".join(f"{d}日(-{int(v)})" for d, v in short_excl)
-            print(f"  ⚠ 日勤不足(新人除く): {se_str} (目標{min_day_excl}人)")
-        else:
-            print(f"  ✓ 日勤最低{min_day_excl}人達成（新人除く）")
+    print(f"\n  {'⚠ 夜勤リーダー欠: '+str(miss)+'日' if miss else '✓ 全日夜勤リーダー配置'}")
     if missed:
         print(f"  ⚠ 未達希望:")
         for s, ds in missed.items():
@@ -1857,7 +1694,7 @@ def _write_one_sheet(wb, result, sheet_title):
         ws.cell(row=r, column=2).fill = FH
     ws.cell(row=RD, column=1, value="名前").font = FONT_H
     ws.cell(row=RD, column=1).fill = FH
-    ws.cell(row=RD, column=2, value="Tier").font = FONT_H
+    ws.cell(row=RD, column=2, value="クラス").font = FONT_H
     ws.cell(row=RD, column=2).fill = FH
     ws.cell(row=RD, column=2).alignment = CTR
 
@@ -1879,24 +1716,25 @@ def _write_one_sheet(wb, result, sheet_title):
         c.font = FONT_H; c.alignment = CTR; c.fill = FH; c.border = BDR
 
     row = RS
-    cur_tier = None
-    tl = {"A": "A（リーダー）", "AB": "AB（サブリーダー）",
-          "B": "B（メンバー1）", "C+": "C+（C既卒）", "C": "C（メンバー2）"}
+    cur_cls = None
+    cls_label = {
+        CLS_ERL: "ERリーダー", CLS_LDR: "リーダー",
+        CLS_ER: "ER可", CLS_HCU: "HCU可", CLS_WD: "病棟可",
+    }
     for s in names:
         t = tiers[s]
-        if t != cur_tier:
-            cur_tier = t
-            w = weekly_d.get(s)
+        if t != cur_cls:
+            cur_cls = t
             ws.cell(row=row, column=1,
-                    value=f"── {tl.get(t, t)} ──").font = Font(bold=True, size=9, color="666666")
+                    value=f"── {cls_label.get(t, t)} ──").font = Font(bold=True, size=9, color="666666")
             row += 1
         ws.cell(row=row, column=1, value=s).font = Font(bold=True, size=11)
-        ws.cell(row=row, column=1).fill = FT.get(t, FT[TIER_B])
+        ws.cell(row=row, column=1).fill = FT.get(t, FT[CLS_WD])
         ws.cell(row=row, column=1).border = BDR
         ws.cell(row=row, column=1).alignment = CTR
         ct = ws.cell(row=row, column=2, value=t)
         ct.font = FONT; ct.alignment = CTR
-        ct.fill = FT.get(t, FT[TIER_B]); ct.border = BDR
+        ct.fill = FT.get(t, FT[CLS_WD]); ct.border = BDR
 
         rd = requests.get(s, {})  # {day_num: shift_type}
         md = set(missed.get(s, []))
