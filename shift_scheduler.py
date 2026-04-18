@@ -1296,8 +1296,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                 reason.append("曜日/祝日/土日制限")
             reason_str = "・".join(reason) if reason else "制限"
             print(f"  ⚠ {s}: 勤務可能{avail_days}日 < 週{weekly[s]}目標{target}日 → {actual_target}日に調整 ({reason_str})")
-        # 時短スタッフはD(日勤)が変数除外されSTのみ → DAY_SHIFTS全体でカウント
-        _pt_shifts = DAY_SHIFTS if short_time_map.get(s) else [D]
+        # 3Eでは時短スタッフ未対応 → Dのみでカウント
+        _pt_shifts = [D]
         prob += pulp.lpSum(x[s, d, t] for d in days for t in _pt_shifts) >= max(actual_target - 1, 0)
         prob += pulp.lpSum(x[s, d, t] for d in days for t in _pt_shifts) <= actual_target + 1
     # 勤務曜日制限 + 祝日不可 + 土日不可
