@@ -2221,6 +2221,18 @@ with tab4:
                 sum(1 for s in names if schedule[s][d] in DAY_SHIFTS)
                 for d in range(r_num_days)
             ]
+            # リーダー可・ERリーダー可の在勤者数（勤務中=公休/明け/休暇以外）
+            _ldr_map = result.get("is_leader_map", {})
+            _erl_map = result.get("is_er_leader_map", {})
+            _WORK = set(DAY_SHIFTS) | {N, SN}
+            summary_data["リーダー可"] = [
+                sum(1 for s in names if _ldr_map.get(s) and schedule[s][d] in _WORK)
+                for d in range(r_num_days)
+            ]
+            summary_data["ERリーダー可"] = [
+                sum(1 for s in names if _erl_map.get(s) and schedule[s][d] in _WORK)
+                for d in range(r_num_days)
+            ]
             st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
 
         with st.expander("🔧 ソルバーログ"):

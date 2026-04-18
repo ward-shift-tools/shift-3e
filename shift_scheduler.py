@@ -1597,6 +1597,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             "new_hire_grad_map": {n: None for n in names},
             "unit_day": unit_day,
             "unit_night": unit_night,
+            "is_leader_map": is_leader_map,
+            "is_er_leader_map": is_er_leader_map,
             "pattern_num": pat_num,
         }
         all_results.append(result)
