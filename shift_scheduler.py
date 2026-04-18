@@ -74,15 +74,15 @@ NIGHT_SHIFTS = [N, SN]
 NIGHT_HOURS_MAP = {N: 16, SN: 12}  # デフォルト値 / 実際は設定値で上書き
 
 VALID_REQUEST = {D, N, O, R, E, L, ST, LD, SN, I, "夜不", "休暇", "明休", "遅希"}
-# 3E クラス制度
-CLS_ERL = "ERリーダー"   # ER/HCU/病棟リーダー可
-CLS_LDR = "リーダー"     # HCU/病棟リーダー可
-CLS_ER  = "ER可"         # ER/HCU/病棟配置可
+# 3E クラス制度（ユニット能力） + リーダーフラグ分離
+CLS_ER  = "ER可"         # ER/HCU/病棟配置可（ERに入れる唯一のクラス）
 CLS_HCU = "HCU可"        # HCU/病棟配置可
 CLS_WD  = "病棟可"       # 病棟のみ
-VALID_CLASSES = {CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD}
-# 後方互換: Tier定数をクラス定数に紐付け（Excel出力等で使用箇所を最小化）
-TIER_A = CLS_ERL; TIER_AB = CLS_LDR; TIER_B = CLS_ER
+VALID_CLASSES = {CLS_ER, CLS_HCU, CLS_WD}
+# 後方互換エイリアス（Excel出力・旧コード用。実体は同じ）
+CLS_ERL = CLS_ER
+CLS_LDR = CLS_HCU
+TIER_A = CLS_ER; TIER_AB = CLS_HCU; TIER_B = CLS_ER
 TIER_CP = CLS_HCU; TIER_C = CLS_WD
 VALID_TIERS = VALID_CLASSES
 MAX_REQUEST_DAYS = 7
@@ -126,24 +126,23 @@ FS  = {
     "委": _PF(start_color="FFE699", end_color="FFE699", fill_type="solid"),  # 委員会: 金色系
 }
 FT = {
-    CLS_ERL: _PF(start_color="DAEEF3", end_color="DAEEF3", fill_type="solid"),
-    CLS_LDR: _PF(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid"),
-    CLS_ER:  _PF(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid"),
+    CLS_ER:  _PF(start_color="DAEEF3", end_color="DAEEF3", fill_type="solid"),
     CLS_HCU: _PF(start_color="FFF4E0", end_color="FFF4E0", fill_type="solid"),
     CLS_WD:  _PF(start_color="FAFAFA", end_color="FAFAFA", fill_type="solid"),
 }
 
+# SAMPLE: (名前, クラス, リーダー可, ERリーダー可, 遅出可, 週勤務, 前月末)
 SAMPLE_STAFF = [
-    ("田中",  CLS_ERL, "◯", "", ""),
-    ("佐藤",  CLS_ERL, "",  "", ""),
-    ("鈴木",  CLS_LDR, "◯", "", ""),
-    ("高橋",  CLS_LDR, "",  "", ""),
-    ("山田",  CLS_ER,  "◯", "", ""),
-    ("中村",  CLS_ER,  "",  "", ""),
-    ("小林",  CLS_HCU, "◯", "", ""),
-    ("加藤",  CLS_HCU, "",  "", ""),
-    ("吉田",  CLS_WD,  "",  "", ""),
-    ("山口",  CLS_WD,  "",  "", ""),
+    ("田中",  CLS_ER,  True,  True,  True,  "", ""),
+    ("佐藤",  CLS_ER,  True,  True,  False, "", ""),
+    ("鈴木",  CLS_ER,  True,  False, True,  "", ""),
+    ("高橋",  CLS_HCU, True,  False, False, "", ""),
+    ("山田",  CLS_ER,  False, False, True,  "", ""),
+    ("中村",  CLS_ER,  False, False, False, "", ""),
+    ("小林",  CLS_HCU, False, False, True,  "", ""),
+    ("加藤",  CLS_HCU, False, False, False, "", ""),
+    ("吉田",  CLS_WD,  False, False, False, "", ""),
+    ("山口",  CLS_WD,  False, False, False, "", ""),
 ]
 
 SETTINGS_DEF = [
@@ -176,12 +175,15 @@ SETTINGS_KEYS = [
 # データ構造
 # ============================================================
 class Staff:
-    def __init__(self, name, cls, can_late=False, weekly_days=None, prev_month="",
+    def __init__(self, name, cls, is_leader=False, is_er_leader=False,
+                 can_late=False, weekly_days=None, prev_month="",
                  night_min=None, night_max=None, consec_max=None,
                  work_days=None, no_holiday=False, no_weekend=False):
         self.name = name
-        self.cls = cls                  # クラス (CLS_ERL/CLS_LDR/CLS_ER/CLS_HCU/CLS_WD)
+        self.cls = cls                  # ユニット能力 (CLS_ER/CLS_HCU/CLS_WD)
         self.tier = cls                 # 後方互換用エイリアス
+        self.is_leader = is_leader or is_er_leader    # リーダー枠可
+        self.is_er_leader = is_er_leader              # ERリーダー必須枠可
         self.can_late = can_late        # True=遅出勤務可能
         self.weekly_days = weekly_days  # None=フルタイム, int=週N日
         self.prev_month = prev_month    # ""=通常, "夜"=前月末夜勤, "明"=前月末明け
@@ -340,18 +342,20 @@ def _to_int(val):
 
 def _parse_staff_list(rows):
     """行データからStaffリストを生成 (rows: list of lists, header skip済み)
-    3E カラム配列:
+    3E カラム配列 (13列):
       0: 名前
-      1: クラス (ERリーダー/リーダー/ER可/HCU可/病棟可)
-      2: 遅出可 (◯/空)
-      3: 週勤務 (パート週N日、空=フルタイム)
-      4: 前月末 (夜/明/空)
-      5: 夜勤Min
-      6: 夜勤Max (0=夜勤完全禁止)
-      7: 連勤Max
-      8: 勤務曜日 ("月火木" など)
-      9: 祝日不可 (◯/空)
-      10: 土日不可 (◯/空)
+      1: クラス (ER可/HCU可/病棟可)
+      2: リーダー可 (◯/空)
+      3: ERリーダー可 (◯/空) ※ONなら自動でリーダー可も真扱い
+      4: 遅出可 (◯/空)
+      5: 週勤務 (パート週N日、空=フルタイム)
+      6: 前月末 (夜/明/空)
+      7: 夜勤Min
+      8: 夜勤Max (0=夜勤完全禁止)
+      9: 連勤Max
+      10: 勤務曜日 ("月火木" など)
+      11: 祝日不可 (◯/空)
+      12: 土日不可 (◯/空)
     """
     staff = []
     for row in rows:
@@ -364,16 +368,21 @@ def _parse_staff_list(rows):
         if cls not in VALID_CLASSES:
             print(f"⚠ '{name}' クラス '{cls}' 不正 → スキップ")
             continue
-        can_late = _is_truthy(row[2]) if len(row) > 2 else False
-        weekly   = _to_int(row[3])    if len(row) > 3 else None
-        prev     = str(row[4]).strip() if len(row) > 4 else ""
+        is_ldr   = _is_truthy(row[2]) if len(row) > 2 else False
+        is_erl   = _is_truthy(row[3]) if len(row) > 3 else False
+        if is_erl and cls != CLS_ER:
+            print(f"⚠ '{name}' ERリーダー可はクラス=ER可のみ指定可 → ERリーダー可を無効化")
+            is_erl = False
+        can_late = _is_truthy(row[4]) if len(row) > 4 else False
+        weekly   = _to_int(row[5])    if len(row) > 5 else None
+        prev     = str(row[6]).strip() if len(row) > 6 else ""
         if prev not in ("夜", "明", ""):
             print(f"⚠ '{name}' 前月末 '{prev}' 不正（夜/明/空欄）→ 無視")
             prev = ""
-        n_min = _to_int(row[5]) if len(row) > 5 else None
-        n_max = _to_int(row[6]) if len(row) > 6 else None
-        c_max = _to_int(row[7]) if len(row) > 7 else None
-        wd_str = str(row[8]).strip() if len(row) > 8 else ""
+        n_min = _to_int(row[7]) if len(row) > 7 else None
+        n_max = _to_int(row[8]) if len(row) > 8 else None
+        c_max = _to_int(row[9]) if len(row) > 9 else None
+        wd_str = str(row[10]).strip() if len(row) > 10 else ""
         wd_map = {"月":0, "火":1, "水":2, "木":3, "金":4, "土":5, "日":6}
         work_days = None
         if wd_str:
@@ -383,10 +392,12 @@ def _parse_staff_list(rows):
                     work_days.add(wd_map[ch])
             if not work_days:
                 work_days = None
-        no_hol = _is_truthy(row[9])  if len(row) > 9  else False
-        no_we  = _is_truthy(row[10]) if len(row) > 10 else False
-        staff.append(Staff(name, cls, can_late, weekly, prev, n_min, n_max, c_max,
-                           work_days, no_hol, no_we))
+        no_hol = _is_truthy(row[11]) if len(row) > 11 else False
+        no_we  = _is_truthy(row[12]) if len(row) > 12 else False
+        staff.append(Staff(name, cls, is_leader=is_ldr, is_er_leader=is_erl,
+                           can_late=can_late, weekly_days=weekly, prev_month=prev,
+                           night_min=n_min, night_max=n_max, consec_max=c_max,
+                           work_days=work_days, no_holiday=no_hol, no_weekend=no_we))
     if not staff:
         print("✗ スタッフが0人です")
         sys.exit(1)
@@ -827,6 +838,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     night_min = {s.name: s.night_min for s in staff_list}
     night_max = {s.name: s.night_max for s in staff_list}
     can_late  = {s.name: s.can_late for s in staff_list}
+    is_leader_map    = {s.name: s.is_leader for s in staff_list}
+    is_er_leader_map = {s.name: s.is_er_leader for s in staff_list}
     dedicated = {s.name: False for s in staff_list}  # 3Eは専従なし（ICU互換）
     # 3E 設定値読み込み
     min_ward_wd = S("min_ward_wd", 4)
@@ -857,19 +870,19 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     parttime = [n for n in names if weekly[n] is not None]
     fwd = date(year, month, 1).weekday()  # 月初の曜日 (0=月)
 
-    # クラス別プール
-    erl_staff   = [n for n in names if classes[n] == CLS_ERL]  # ERリーダー
-    ldr_staff   = [n for n in names if classes[n] == CLS_LDR]  # リーダー
-    er_staff    = [n for n in names if classes[n] == CLS_ER]   # ER可
-    hcu_staff   = [n for n in names if classes[n] == CLS_HCU]  # HCU可
-    wd_staff    = [n for n in names if classes[n] == CLS_WD]   # 病棟可のみ
+    # クラス別プール（ユニット配置能力）
+    er_staff    = [n for n in names if classes[n] == CLS_ER]   # ER/HCU/病棟配置可
+    hcu_staff   = [n for n in names if classes[n] == CLS_HCU]  # HCU/病棟配置可
+    wd_staff    = [n for n in names if classes[n] == CLS_WD]   # 病棟のみ
 
-    # リーダープール（日勤・夜勤共通リーダー資格）
-    leader_pool = erl_staff + ldr_staff
-    # ER配置可（基本資格: ER可 + ERリーダー）+ 特例で全クラス許容（ER leaderが必ずいる前提）
-    er_capable  = erl_staff + er_staff
-    # HCU配置可
-    hcu_capable = erl_staff + ldr_staff + er_staff + hcu_staff
+    # ERリーダー枠（平日ER必須1名）
+    erl_staff   = [n for n in names if is_er_leader_map[n]]
+    # リーダー枠（病棟・HCU・共リーダー）
+    leader_pool = [n for n in names if is_leader_map[n]]
+    # ER配置可 = クラス=ER可 のみ（HCU/病棟クラスはER配置不可）
+    er_capable  = er_staff
+    # HCU配置可 = ER可 + HCU可
+    hcu_capable = er_staff + hcu_staff
     # 遅出可能スタッフ
     late_pool   = [n for n in names if can_late[n]]
 
@@ -879,8 +892,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     print(f"  3E勤務表: {year}年{month}月 ({num_days}日)")
     print(f"{'='*55}")
     print(f"スタッフ: {len(names)}人 "
-          f"(ERリーダー:{len(erl_staff)} リーダー:{len(ldr_staff)} "
-          f"ER可:{len(er_staff)} HCU可:{len(hcu_staff)} 病棟可:{len(wd_staff)})")
+          f"(ER可:{len(er_staff)} HCU可:{len(hcu_staff)} 病棟可:{len(wd_staff)}) "
+          f"／ リーダー可:{len(leader_pool)} ERリーダー可:{len(erl_staff)}")
     if parttime:
         pt_str = ", ".join(f"{n}(週{weekly[n]})" for n in parttime)
         print(f"パートタイム: {pt_str}")
@@ -1121,33 +1134,26 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         for d in days:
             prob += pulp.lpSum(un[s, d, u] for u in NIGHT_UNITS) == x[s, d, N]
 
-    # ── クラス別ユニット配置制約 ──
-    # リーダー(共通リーダー)資格: CLS_ERL or CLS_LDR のみ
-    non_leader = [s for s in names if classes[s] not in (CLS_ERL, CLS_LDR)]
+    # ── ユニット配置制約（クラス + リーダーフラグ分離） ──
+    # 1) リーダー枠: is_leader=True のみ配置可
+    non_leader = [s for s in names if not is_leader_map[s]]
     for s in non_leader:
         for d in days:
             prob += ud[s, d, UNIT_LEAD] == 0
             prob += un[s, d, UNIT_LEAD] == 0
 
-    # HCU配置不可: 病棟可(CLS_WD)のみ HCU禁止
+    # 2) ER配置: クラス=ER可 のみ（HCU可/病棟可はER不可）
+    non_er = [s for s in names if classes[s] != CLS_ER]
+    for s in non_er:
+        for d in days:
+            prob += ud[s, d, UNIT_ER] == 0
+
+    # 3) HCU配置: クラス=ER可 or HCU可（病棟可はHCU不可）
     wd_only = [s for s in names if classes[s] == CLS_WD]
     for s in wd_only:
         for d in days:
             prob += ud[s, d, UNIT_HCU] == 0
-            prob += ud[s, d, UNIT_ER]  == 0
             prob += un[s, d, UNIT_HCU] == 0
-
-    # HCU可(CLS_HCU): ER禁止（ERリーダー不在の通常ルール; ER leader強制でER可になる）
-    hcu_only = [s for s in names if classes[s] == CLS_HCU]
-    for s in hcu_only:
-        for d in days:
-            prob += ud[s, d, UNIT_ER] == 0
-
-    # リーダー(CLS_LDR): ER配置不可（ERリーダー資格なし）
-    ldr_only = [s for s in names if classes[s] == CLS_LDR]
-    for s in ldr_only:
-        for d in days:
-            prob += ud[s, d, UNIT_ER] == 0
 
     # ================================================================
     # 3E: 日次配置人数制約（平日 vs 休日）
@@ -1717,10 +1723,7 @@ def _write_one_sheet(wb, result, sheet_title):
 
     row = RS
     cur_cls = None
-    cls_label = {
-        CLS_ERL: "ERリーダー", CLS_LDR: "リーダー",
-        CLS_ER: "ER可", CLS_HCU: "HCU可", CLS_WD: "病棟可",
-    }
+    cls_label = {CLS_ER: "ER可", CLS_HCU: "HCU可", CLS_WD: "病棟可"}
     for s in names:
         t = tiers[s]
         if t != cur_cls:

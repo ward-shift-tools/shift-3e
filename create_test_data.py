@@ -26,61 +26,68 @@ hdr_fill = PatternFill("solid", fgColor="4472C4")
 hdr_font = Font(bold=True, color="FFFFFF", size=11)
 
 # ====== スタッフデータ ======
-# 列: 名前, クラス, 遅出可, 週勤務, 前月末, 夜勤Min, 夜勤Max, 連勤Max, 勤務曜日, 祝日不可, 土日不可
-# クラス: ERリーダー / リーダー / ER可 / HCU可 / 病棟可
+# 列: 名前, クラス, リーダー可, ERリーダー可, 遅出可, 週勤務, 前月末,
+#     夜勤Min, 夜勤Max, 連勤Max, 勤務曜日, 祝日不可, 土日不可
+# クラス: ER可 / HCU可 / 病棟可
+# ○ = True相当
+_O = "○"
 staff_data = [
-    # ── ERリーダー（ER・HCU・病棟・共リーダー全て可）──
-    ["山田",   "ERリーダー", "○", None, "明", None, None, None, None, None, None],
-    ["中村",   "ERリーダー", "○", None, None, None, None, None, None, None, None],
-    ["田中",   "ERリーダー", None, None, "夜", None, None, None, None, None, None],
-    ["佐藤",   "ERリーダー", "○", None, None, None, None, None, None, None, None],
-    ["鈴木",   "ERリーダー", None, None, None, None, None, None, None, None, None],
+    # ── ER可 + ERリーダー可（平日ER必須枠に入れる）──
+    ["山田", "ER可", _O, _O, _O, None, "明", None, None, None, None, None, None],
+    ["中村", "ER可", _O, _O, _O, None, None, None, None, None, None, None, None],
+    ["田中", "ER可", _O, _O, None, None, "夜", None, None, None, None, None, None],
+    ["佐藤", "ER可", _O, _O, _O, None, None, None, None, None, None, None, None],
+    ["鈴木", "ER可", _O, _O, None, None, None, None, None, None, None, None, None],
 
-    # ── リーダー（HCU・病棟・共リーダー可、ER不可）──
-    ["伊藤",   "リーダー", "○", None, "明", None, None, None, None, None, None],
-    ["渡辺",   "リーダー", "○", None, None, None, None, None, None, None, None],
-    ["小林",   "リーダー", None, None, None, None, None, None, None, None, None],
-    ["加藤",   "リーダー", "○", None, None, None, None, None, None, None, None],
-    ["吉田",   "リーダー", None, None, "夜", None, None, None, None, None, None],
-    ["山口",   "リーダー", "○", None, None, None, None, None, None, None, None],
-    ["松本",   "リーダー", None, None, None, None, None, None, None, None, None],
-    ["井上",   "リーダー", "○", None, "明", None, None, None, None, None, None],
+    # ── ER可 + リーダー可（ERリーダー不可）──
+    ["伊藤", "ER可", _O, None, _O, None, "明", None, None, None, None, None, None],
+    ["渡辺", "ER可", _O, None, _O, None, None, None, None, None, None, None, None],
+    ["加藤", "ER可", _O, None, _O, None, None, None, None, None, None, None, None],
+    ["吉田", "ER可", _O, None, None, None, "夜", None, None, None, None, None, None],
 
-    # ── ER可（ER・HCU・病棟可、リーダー不可）──
-    ["木村",   "ER可", "○", None, None, None, None, None, None, None, None],
-    ["林",     "ER可", None, None, None, None, None, None, None, None, None],
-    ["清水",   "ER可", "○", None, None, None, None, None, None, None, None],
-    ["山本",   "ER可", None, None, "夜", None, None, None, None, None, None],
-    ["中山",   "ER可", "○", None, None, None, None, None, None, None, None],
-    ["小川",   "ER可", None, None, None, None, None, None, None, None, None],
-    ["池田",   "ER可", None, None, None, None, None, None, None, None, None],
+    # ── ER可（リーダー不可のER要員）──
+    ["木村", "ER可", None, None, _O, None, None, None, None, None, None, None, None],
+    ["林",   "ER可", None, None, None, None, None, None, None, None, None, None, None],
+    ["清水", "ER可", None, None, _O, None, None, None, None, None, None, None, None],
+    ["山本", "ER可", None, None, None, None, "夜", None, None, None, None, None, None],
+    ["中山", "ER可", None, None, _O, None, None, None, None, None, None, None, None],
+    ["小川", "ER可", None, None, None, None, None, None, None, None, None, None, None],
+    ["池田", "ER可", None, None, None, None, None, None, None, None, None, None, None],
 
-    # ── HCU可（HCU・病棟可、ER・リーダー不可）──
-    ["橋本",   "HCU可", None, None, None, None, None, None, None, None, None],
-    ["石田",   "HCU可", None, None, "明", None, None, None, None, None, None],
-    ["前田",   "HCU可", "○", None, None, None, None, None, None, None, None],
-    ["岡田",   "HCU可", None, None, None, None, None, None, None, None, None],
-    ["長田",   "HCU可", None, None, None, None, None, None, None, None, None],
-    ["村田",   "HCU可", "○", None, None, None, None, None, None, None, None],
-    ["藤田",   "HCU可", None, None, None, None, None, None, None, None, None],
-    ["坂本",   "HCU可", None, None, "夜", None, None, None, None, None, None],
+    # ── HCU可 + リーダー可（病棟/HCU/共リーダーOK、ER不可）──
+    ["小林", "HCU可", _O, None, None, None, None, None, None, None, None, None, None],
+    ["山口", "HCU可", _O, None, _O, None, None, None, None, None, None, None, None],
+    ["松本", "HCU可", _O, None, None, None, None, None, None, None, None, None, None],
+    ["井上", "HCU可", _O, None, _O, None, "明", None, None, None, None, None, None],
 
-    # ── 病棟可（病棟のみ）──
-    ["斎藤",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["西田",   "病棟可", None, None, "明", None, None, None, None, None, None],
-    ["福田",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["中田",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["原田",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["宮田",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["田村",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["川村",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["高橋",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["三宅",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["上田",   "病棟可", None, None, None, None, None, None, None, None, None],
-    ["青木",   "病棟可", None, None, "夜", None, None, None, None, None, None],
+    # ── HCU可（HCU・病棟のみ）──
+    ["橋本", "HCU可", None, None, None, None, None, None, None, None, None, None, None],
+    ["石田", "HCU可", None, None, None, None, "明", None, None, None, None, None, None],
+    ["前田", "HCU可", None, None, _O, None, None, None, None, None, None, None, None],
+    ["岡田", "HCU可", None, None, None, None, None, None, None, None, None, None, None],
+    ["長田", "HCU可", None, None, None, None, None, None, None, None, None, None, None],
+    ["村田", "HCU可", None, None, _O, None, None, None, None, None, None, None, None],
+    ["藤田", "HCU可", None, None, None, None, None, None, None, None, None, None, None],
+    ["坂本", "HCU可", None, None, None, None, "夜", None, None, None, None, None, None],
+
+    # ── 病棟可 ──
+    ["斎藤", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["西田", "病棟可", None, None, None, None, "明", None, None, None, None, None, None],
+    ["福田", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["中田", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["原田", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["宮田", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["田村", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["川村", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["高橋", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["三宅", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["上田", "病棟可", None, None, None, None, None, None, None, None, None, None, None],
+    ["青木", "病棟可", None, None, None, None, "夜", None, None, None, None, None, None],
 ]
 
-staff_headers = ["名前", "クラス", "遅出可", "週勤務", "前月末", "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
+staff_headers = ["名前", "クラス", "リーダー可", "ERリーダー可", "遅出可",
+                 "週勤務", "前月末",
+                 "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
 
 # ====== 勤務希望テストデータ ======
 # 各スタッフに適当な希望を設定

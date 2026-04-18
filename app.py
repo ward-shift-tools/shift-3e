@@ -15,7 +15,7 @@ from shift_scheduler import (
     Staff, build_and_solve,
     D, N, A, O, R, V, E, L, ST, LD, SN, I,
     SHIFTS, DAY_SHIFTS, NIGHT_SHIFTS,
-    CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD, VALID_CLASSES,
+    CLS_ER, CLS_HCU, CLS_WD, VALID_CLASSES,
     TIER_A, TIER_AB, TIER_B, TIER_CP, TIER_C, VALID_TIERS,
     UNIT_WD, UNIT_HCU, UNIT_ER, UNIT_LEAD,
     _get_holidays_and_days_off, _write_one_sheet,
@@ -393,7 +393,7 @@ def _render_load_preview(staff_df, requests_df=None):
     # クラス分布
     cls_col = "クラス" if "クラス" in df.columns else "Tier"
     cls_counts = df[cls_col].fillna("").astype(str).str.strip().value_counts()
-    cls_order = [CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD]
+    cls_order = [CLS_ER, CLS_HCU, CLS_WD]
     cls_str = " / ".join(
         f"{c}:{int(cls_counts.get(c, 0))}" for c in cls_order if cls_counts.get(c, 0) > 0
     )
@@ -507,8 +507,10 @@ def _apply_settings(gs_settings):
 def _default_staff():
     return pd.DataFrame({
         "名前": ["スタッフA", "スタッフB", "スタッフC", "スタッフD", "スタッフE"],
-        "クラス": [CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD],
-        "遅出可": [True, False, True, False, False],
+        "クラス": [CLS_ER, CLS_ER, CLS_ER, CLS_HCU, CLS_WD],
+        "リーダー可":   [True, True,  False, False, False],
+        "ERリーダー可": [True, False, False, False, False],
+        "遅出可":       [True, False, True,  False, False],
         "週勤務": [None, None, None, None, None],
         "前月末": ["", "", "", "", ""],
         "夜勤Min": [None, None, None, None, None],
@@ -840,8 +842,9 @@ def _generate_template_excel(year, month, num_staff=20):
         ws_s.cell(row=r, column=4).alignment = Alignment(horizontal="center")
 
     # === 共通データ ===
-    # 3E スタッフ情報カラム
-    staff_headers = ["名前", "クラス", "遅出可", "週勤務", "前月末",
+    # 3E スタッフ情報カラム (13列)
+    staff_headers = ["名前", "クラス", "リーダー可", "ERリーダー可", "遅出可",
+                     "週勤務", "前月末",
                      "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
     n_staff_cols = len(staff_headers)
     weekdays_jp = ["月", "火", "水", "木", "金", "土", "日"]
@@ -849,13 +852,14 @@ def _generate_template_excel(year, month, num_staff=20):
     holidays = {d.day for d, _ in jpholiday.month_holidays(year, month)}
 
     samples_name = ["田中", "佐藤", "鈴木", "高橋", "山田"]
-    samples_tier = [CLS_ERL, CLS_LDR, CLS_ER, CLS_HCU, CLS_WD]
+    samples_tier = [CLS_ER, CLS_ER, CLS_ER, CLS_HCU, CLS_WD]
+    # 列: リーダー可, ERリーダー可, 遅出可, 週勤務, 前月末, 夜勤Min, 夜勤Max, 連勤Max, 勤務曜日, 祝日不可, 土日不可
     samples_extra = [
-        ["◯", None, None, None, None, None, None, None, None],  # 遅出可
-        [None, None, None, None, None, None, None, None, None],
-        ["◯", None, None, None, None, None, None, None, None],
-        [None, None, None, None, None, None, None, None, None],
-        [None, None, None, None, None, None, None, None, None],
+        ["◯", "◯", "◯", None, None, None, None, None, None, None, None],  # ERリーダー
+        ["◯", None, None, None, None, None, None, None, None, None, None],  # 通常リーダー(ER可)
+        [None, None, "◯", None, None, None, None, None, None, None, None],  # ER可（リーダー不可）
+        [None, None, None, None, None, None, None, None, None, None, None], # HCU可
+        [None, None, None, None, None, None, None, None, None, None, None], # 病棟可
     ]
     total_rows = max(num_staff, len(samples_name))
 
@@ -909,11 +913,11 @@ def _generate_template_excel(year, month, num_staff=20):
     legend_start_row = 4 + total_rows + 2
     ws_staff.cell(row=legend_start_row, column=1, value="📖 クラス定義").font = Font(bold=True, size=11, color="548235")
     tier_defs = [
-        (CLS_ERL, "ERリーダー資格・ER/HCU/病棟すべての配置可・全リーダー可"),
-        (CLS_LDR, "リーダー資格・HCU/病棟配置可・病棟+HCUリーダー可"),
-        (CLS_ER,  "ER可スタッフ・ER/HCU/病棟配置可（リーダー資格なし）"),
-        (CLS_HCU, "HCU可スタッフ・HCU/病棟配置可"),
+        (CLS_ER,  "ER/HCU/病棟すべて配置可（ER配置可の唯一のクラス）"),
+        (CLS_HCU, "HCU/病棟配置可（ER不可）"),
         (CLS_WD,  "病棟のみ配置可"),
+        ("リーダー可",   "ON=病棟・HCU・共リーダー枠に入れる（クラスと独立）"),
+        ("ERリーダー可", "ON=平日ER必須枠に入れる（クラス=ER可必須、自動でリーダー可も真）"),
     ]
     for i, (cls, desc) in enumerate(tier_defs):
         ws_staff.cell(row=legend_start_row + 1 + i, column=1, value=cls).font = Font(bold=True)
@@ -1079,7 +1083,7 @@ def _parse_uploaded_excel(uploaded_file, year, month):
     # 3. 旧分離形式: 「スタッフ一覧」+「勤務希望」
     staff_list = []
     reqs = {}
-    n_staff_cols = 11  # 名前〜土日不可（3E: 11列）
+    n_staff_cols = 13  # 名前〜土日不可（3E: 13列）
 
     if "スタッフ情報" in wb.sheetnames:
         # === 新形式（スタッフ情報 + 勤務希望 2シート） ===
@@ -1486,7 +1490,8 @@ with tab1:
     )
 
     # --- スタッフ情報カラム選択（表示/非表示） ---
-    _all_staff_detail_cols = ["クラス", "遅出可", "週勤務", "前月末",
+    _all_staff_detail_cols = ["クラス", "リーダー可", "ERリーダー可", "遅出可",
+                              "週勤務", "前月末",
                               "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
     if view_mode in ("👤 スタッフ情報", "👤+📝 すべて"):
         with st.expander("⚙ 表示カラム選択", expanded=False):
@@ -1584,7 +1589,8 @@ with tab1:
             st.session_state.requests_df = pd.DataFrame(rows)
 
     # --- 統合DataFrame構築 ---
-    _staff_cols = ["クラス", "遅出可", "週勤務", "前月末",
+    _staff_cols = ["クラス", "リーダー可", "ERリーダー可", "遅出可",
+                   "週勤務", "前月末",
                    "夜勤Min", "夜勤Max", "連勤Max", "勤務曜日", "祝日不可", "土日不可"]
     _day_cols = [str(d) for d in range(1, num_days + 1)]
 
@@ -1612,7 +1618,9 @@ with tab1:
 
     # --- column_config 構築 ---
     _col_config_defs = {
-        "クラス": st.column_config.SelectboxColumn("クラス", options=list(VALID_CLASSES), width="small"),
+        "クラス": st.column_config.SelectboxColumn("クラス", options=[CLS_ER, CLS_HCU, CLS_WD], width="small"),
+        "リーダー可":   st.column_config.CheckboxColumn("リーダー可", width="small", help="病棟/HCU/共リーダー枠に入れる"),
+        "ERリーダー可": st.column_config.CheckboxColumn("ERリーダー可", width="small", help="平日ER必須枠（クラス=ER可必須）"),
         "遅出可": st.column_config.CheckboxColumn("遅出可", width="small"),
         "週勤務": st.column_config.NumberColumn("週勤務", min_value=1, max_value=7, step=1, width="small"),
         "前月末": st.column_config.SelectboxColumn("前月末", options=["", "夜", "明"], width="small"),
@@ -1727,6 +1735,11 @@ with tab3:
             if cls not in VALID_CLASSES:
                 st.warning(f"⚠ {name}: クラス '{cls}' 不正 → スキップ")
                 continue
+            is_ldr   = bool(row.get("リーダー可", False))
+            is_erl   = bool(row.get("ERリーダー可", False))
+            if is_erl and cls != CLS_ER:
+                st.warning(f"⚠ {name}: ERリーダー可はクラス=ER可のみ → 無効化")
+                is_erl = False
             can_late = bool(row.get("遅出可", False))
             weekly = int(row["週勤務"]) if pd.notna(row.get("週勤務")) else None
             prev = str(row.get("前月末", "")).strip()
@@ -1747,7 +1760,8 @@ with tab3:
             no_hol = bool(row.get("祝日不可", False))
             no_we = bool(row.get("土日不可", False))
             staff_list.append(Staff(
-                name, cls, can_late=can_late, weekly_days=weekly, prev_month=prev,
+                name, cls, is_leader=is_ldr, is_er_leader=is_erl,
+                can_late=can_late, weekly_days=weekly, prev_month=prev,
                 night_min=n_min, night_max=n_max, consec_max=c_max,
                 work_days=work_days, no_holiday=no_hol, no_weekend=no_we))
 
