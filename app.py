@@ -324,9 +324,11 @@ def _staff_to_df(staff_list):
         if s.work_days:
             wd_str = "".join(WEEKDAY_REV[d] for d in sorted(s.work_days))
         rows.append({
-            "名前": s.name, "Tier": s.tier,
-            "夜勤専従": s.dedicated,
-            "時短": s.short_time,
+            "名前": s.name,
+            "クラス": s.cls,
+            "リーダー可": bool(s.is_leader),
+            "ERリーダー可": bool(s.is_er_leader),
+            "遅出可": bool(s.can_late),
             "週勤務": s.weekly_days,
             "前月末": s.prev_month or "",
             "夜勤Min": s.night_min,
@@ -335,10 +337,6 @@ def _staff_to_df(staff_list):
             "勤務曜日": wd_str,
             "祝日不可": s.no_holiday,
             "土日不可": s.no_weekend,
-            "夜勤研修": s.night_training,
-            "研修夜勤回数": s.night_training_max,
-            "新人": s.new_hire,
-            "新人卒業日": s.new_hire_graduation_day,
         })
     return pd.DataFrame(rows) if rows else _default_staff()
 
