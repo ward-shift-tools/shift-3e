@@ -1259,10 +1259,18 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     ld_sn_pen = {}
     ld_consec_pen = {}
 
-    # 3E: 研修(R)は使用しない（ICU由来シフト種別 / 希望記号としても無視）
+    # 3E: 研修(R)は希望(=R)で指定された日のみ許可。それ以外は禁止。
+    _r_requested = set()
+    for _s, _rs in requests.items():
+        if _s not in names:
+            continue
+        for _d, _t in _rs.items():
+            if 1 <= _d <= num_days and _t == R:
+                _r_requested.add((_s, _d - 1))
     for s in names:
         for d in days:
-            prob += x[s, d, R] == 0
+            if (s, d) not in _r_requested:
+                prob += x[s, d, R] == 0
 
     for s in parttime:
         for d in days:
@@ -1396,8 +1404,11 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                         req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
                         prob += x[s, d_idx, L] + req_miss[key] >= 1
                     # can_late=False のスタッフは遅出不可のため無視
-                elif shift_type in (R, I):
-                    pass  # 3Eでは研修・委員会なし、無視
+                elif shift_type == R:
+                    # 研修: ハード制約（勤務日数に含むが日勤人数にはカウントしない）
+                    prob += x[s, d_idx, R] == 1
+                elif shift_type == I:
+                    pass  # 3Eでは委員会なし、無視
                 else:
                     key = (s, d_idx)
                     req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)

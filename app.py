@@ -2233,7 +2233,103 @@ with tab4:
                 sum(1 for s in names if _erl_map.get(s) and schedule[s][d] in _WORK)
                 for d in range(r_num_days)
             ]
+            # ユニット別配置人数（日勤）
+            _ud = result.get("unit_day", {})
+            _un = result.get("unit_night", {})
+            for _u_label, _u_key in [("ER配置", "ER"), ("HCU配置", "HCU"), ("病棟配置", "病棟"), ("共L配置", "共リーダー")]:
+                summary_data[_u_label] = [
+                    sum(1 for s in names if (_ud.get(s, [""] * r_num_days)[d] == _u_key))
+                    for d in range(r_num_days)
+                ]
+            # 夜勤ユニット別
+            for _u_label, _u_key in [("夜ER", "ER"), ("夜HCU", "HCU"), ("夜病棟", "病棟"), ("夜共L", "共リーダー")]:
+                summary_data[_u_label] = [
+                    sum(1 for s in names if (_un.get(s, [""] * r_num_days)[d] == _u_key))
+                    for d in range(r_num_days)
+                ]
+            # 遅出有無
+            summary_data["遅出"] = [
+                sum(1 for s in names if schedule[s][d] == L) for d in range(r_num_days)
+            ]
             st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
+
+        # ── スタッフ別集計 ─────────────────────────────────────
+        with st.expander("👤 スタッフ別集計", expanded=False):
+            _ldr_map = result.get("is_leader_map", {})
+            _erl_map = result.get("is_er_leader_map", {})
+            rows_st = []
+            for s in names:
+                sched = schedule[s]
+                # 最大連勤
+                _WORK_ALL = set(DAY_SHIFTS) | {N, SN}
+                max_consec = cur = 0
+                for v in sched:
+                    if v in _WORK_ALL:
+                        cur += 1
+                        max_consec = max(max_consec, cur)
+                    else:
+                        cur = 0
+                miss_cnt = len(missed.get(s, [])) if isinstance(missed, dict) else 0
+                rows_st.append({
+                    "名前": s,
+                    "クラス": tiers.get(s, ""),
+                    "L可": "◯" if _ldr_map.get(s) else "",
+                    "ERL可": "◯" if _erl_map.get(s) else "",
+                    "日勤": sum(1 for v in sched if v in DAY_SHIFTS),
+                    "夜勤": sum(1 for v in sched if v == N),
+                    "明け": sum(1 for v in sched if v == A),
+                    "遅出": sum(1 for v in sched if v == L),
+                    "研修": sum(1 for v in sched if v == R),
+                    "休": sum(1 for v in sched if v == O),
+                    "休暇": sum(1 for v in sched if v == V),
+                    "最大連勤": max_consec,
+                    "未達希望": miss_cnt,
+                })
+            st.dataframe(pd.DataFrame(rows_st), use_container_width=True, hide_index=True)
+
+        # ── ユニット配置マトリクス ─────────────────────────────
+        with st.expander("🏥 ユニット配置マトリクス（日/夜）", expanded=False):
+            _ud = result.get("unit_day", {})
+            _un = result.get("unit_night", {})
+            if _ud:
+                st.markdown("##### 日勤配置")
+                _day_rows = []
+                for s in names:
+                    row = {"名前": s}
+                    for d in range(r_num_days):
+                        row[str(d + 1)] = (_ud.get(s, [""] * r_num_days)[d] or "")
+                    _day_rows.append(row)
+                st.dataframe(pd.DataFrame(_day_rows), use_container_width=True, hide_index=True)
+            if _un:
+                st.markdown("##### 夜勤配置")
+                _night_rows = []
+                for s in names:
+                    row = {"名前": s}
+                    for d in range(r_num_days):
+                        row[str(d + 1)] = (_un.get(s, [""] * r_num_days)[d] or "")
+                    _night_rows.append(row)
+                st.dataframe(pd.DataFrame(_night_rows), use_container_width=True, hide_index=True)
+
+        # ── 夜勤ペア構成 ───────────────────────────────────────
+        with st.expander("🌙 夜勤ペア構成", expanded=False):
+            _ldr_map = result.get("is_leader_map", {})
+            _erl_map = result.get("is_er_leader_map", {})
+            pair_rows = []
+            for d in range(r_num_days):
+                night_members = [s for s in names if schedule[s][d] == N]
+                if not night_members:
+                    continue
+                parts = []
+                for s in night_members:
+                    tag = tiers.get(s, "")
+                    flags = []
+                    if _erl_map.get(s): flags.append("ERL")
+                    elif _ldr_map.get(s): flags.append("L")
+                    ftxt = ("(" + "/".join(flags) + ")") if flags else ""
+                    parts.append(f"{s}[{tag}]{ftxt}")
+                pair_rows.append({"日": d + 1, "人数": len(night_members), "メンバー": " + ".join(parts)})
+            if pair_rows:
+                st.dataframe(pd.DataFrame(pair_rows), use_container_width=True, hide_index=True)
 
         with st.expander("🔧 ソルバーログ"):
             st.code(st.session_state.get("console_output", ""))
