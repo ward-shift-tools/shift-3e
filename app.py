@@ -1215,25 +1215,48 @@ else:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("日勤ユニット最低人数")
-st.sidebar.caption("平日 ユニット別最低人数")
+
+# セクション境界を色分けで視認性UP
+st.sidebar.markdown(
+    '<div style="background-color:#E3F2FD; padding:6px 10px; border-radius:6px; '
+    'border-left:4px solid #1976D2; margin:6px 0 4px 0; font-weight:600; color:#0D47A1;">'
+    '平日 ユニット別最低人数</div>',
+    unsafe_allow_html=True,
+)
 col1a, col1b, col1c = st.sidebar.columns(3)
 min_ward_wd = col1a.number_input("病棟", 1, 20, 4, key="inp_min_ward_wd")
 min_hcu_wd  = col1b.number_input("HCU", 1, 20, 2, key="inp_min_hcu_wd")
-min_er_wd   = col1c.number_input("ER ❓", 1, 20, 3, key="inp_min_er_wd",
+min_er_wd   = col1c.number_input("ER", 1, 20, 3, key="inp_min_er_wd",
                                    help="うちERリーダー1名必須（ERL可フラグ保持者）")
-st.sidebar.caption("休日 ユニット別最低人数（休日ERはなし）")
+
+st.sidebar.markdown(
+    '<div style="background-color:#FFF3E0; padding:6px 10px; border-radius:6px; '
+    'border-left:4px solid #F57C00; margin:10px 0 4px 0; font-weight:600; color:#E65100;">'
+    '休日 ユニット別最低人数（休日ERはなし）</div>',
+    unsafe_allow_html=True,
+)
 col2a, col2b = st.sidebar.columns(2)
 min_ward_hd = col2a.number_input("病棟", 1, 20, 4, key="inp_min_ward_hd")
 min_hcu_hd  = col2b.number_input("HCU", 1, 20, 2, key="inp_min_hcu_hd")
 
-st.sidebar.caption("共通配置（毎日固定）")
+st.sidebar.markdown(
+    '<div style="background-color:#E8F5E9; padding:6px 10px; border-radius:6px; '
+    'border-left:4px solid #388E3C; margin:10px 0 4px 0; font-weight:600; color:#1B5E20;">'
+    '共通配置（毎日固定）</div>',
+    unsafe_allow_html=True,
+)
 col3a, col3b = st.sidebar.columns(2)
 leader_count = col3a.number_input("共リーダー", 0, 5, 1, key="inp_leader_count",
                                    help="毎日固定で配置する共リーダー人数（リーダー可フラグ保持者から）")
 late_count   = col3b.number_input("遅出", 0, 5, 1, key="inp_late_count",
                                    help="毎日固定で配置する遅出人数（遅出可フラグ保持者から）")
 
-st.sidebar.caption("日勤系合計 下限〜上限")
+st.sidebar.markdown(
+    '<div style="background-color:#F3E5F5; padding:6px 10px; border-radius:6px; '
+    'border-left:4px solid #7B1FA2; margin:10px 0 4px 0; font-weight:600; color:#4A148C;">'
+    '日勤系合計 下限〜上限</div>',
+    unsafe_allow_html=True,
+)
 col4a, col4b, col4c, col4d = st.sidebar.columns(4)
 min_day_wd  = col4a.number_input("平日↓", 5, 30, 11, key="inp_min_day_wd",
                                    help="平日の日勤系合計の下限（病棟+HCU+ER+共L+遅出）")
