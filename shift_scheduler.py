@@ -1116,12 +1116,15 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     # 3E: 遅出制約
     # ================================================================
     # 遅出(L) は1日 late_count 名固定（can_late=Trueのスタッフのみ）
-    late_short = {}
+    late_short_v = {}  # 遅出下限不足スラック
     for d in days:
         late_sum = pulp.lpSum(x[s, d, L] for s in late_pool) if late_pool else pulp.lpSum([])
-        # ハード: 遅出は必ず late_count 名
+        # ソフト: 下限(late_count) 下限割れを診断出力、上限はハード
         if late_pool and late_count > 0:
-            prob += late_sum == late_count
+            lt_short = pulp.LpVariable(f"late_short_{d}", lowBound=0)
+            prob += late_sum + lt_short >= late_count
+            prob += late_sum <= late_count
+            late_short_v[d] = lt_short
         # 遅出の翌日: 休(O) か 夜勤(N) のみ
         if d < num_days - 1:
             for s in late_pool:
@@ -1177,6 +1180,14 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     rest_days_set = weekends | holidays  # 土日 + 祝日（day number 1-indexed）
 
     day_short = {}  # ソフト不足変数（コンソール表示用）
+    # ─── 違反診断用スラック辞書 ───
+    wd_total_short = {}   # 平日 日勤系合計 下限割れ
+    wd_total_over  = {}   # 平日 日勤系合計 上限超過
+    hd_total_short = {}   # 休日 日勤系合計 下限割れ
+    hd_total_over  = {}   # 休日 日勤系合計 上限超過
+    erl_short      = {}   # 平日 ERリーダー必須(>=1) 不足
+    lead_short_v   = {}   # 毎日 共リーダー必須 下限不足
+    # late_short_v は遅出制約のループで既に初期化済み
     for d in days:
         day_num = d + 1
         is_rest = day_num in rest_days_set
@@ -1186,8 +1197,11 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         er_sum    = pulp.lpSum(ud[s, d, UNIT_ER]   for s in names)
         lead_sum  = pulp.lpSum(ud[s, d, UNIT_LEAD] for s in names)
 
-        # 共通リーダーは毎日 leader_count 名（平日・休日とも）
-        prob += lead_sum == leader_count
+        # 共通リーダー: 下限ソフト / 上限ハード
+        ld_short = pulp.LpVariable(f"lead_short_{d}", lowBound=0)
+        prob += lead_sum + ld_short >= leader_count
+        prob += lead_sum <= leader_count
+        lead_short_v[d] = ld_short
 
         if is_rest:
             # 休日: 病棟≥min_ward_hd, HCU≥min_hcu_hd, ER=0
@@ -1203,16 +1217,26 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
 
             prob += er_sum == 0  # 休日はER配置なし
 
-            # 休日日勤系合計: min_day_hd ≤ sum ≤ max_day_hd（下限/上限両方）
+            # 休日日勤系合計: ソフト化（下限割れ/上限超過を診断出力）
             rest_day_sum = pulp.lpSum(x[s, d, t] for s in names for t in DAY_SHIFTS)
-            prob += rest_day_sum >= min_day_hd
-            prob += rest_day_sum <= max_day_hd
-        # 平日日勤系合計: min_day_wd ≤ sum ≤ max_day_wd
+            short_hd = pulp.LpVariable(f"hd_total_short_{d}", lowBound=0)
+            over_hd  = pulp.LpVariable(f"hd_total_over_{d}",  lowBound=0)
+            prob += rest_day_sum + short_hd >= min_day_hd
+            prob += rest_day_sum - over_hd  <= max_day_hd
+            hd_total_short[d] = short_hd
+            hd_total_over[d]  = over_hd
+        # 平日日勤系合計: ソフト化
         if not is_rest:
             wd_day_sum = pulp.lpSum(x[s, d, t] for s in names for t in DAY_SHIFTS)
-            prob += wd_day_sum >= min_day_wd
-            prob += wd_day_sum <= max_day_wd
+            short_wd = pulp.LpVariable(f"wd_total_short_{d}", lowBound=0)
+            over_wd  = pulp.LpVariable(f"wd_total_over_{d}",  lowBound=0)
+            prob += wd_day_sum + short_wd >= min_day_wd
+            prob += wd_day_sum - over_wd  <= max_day_wd
+            wd_total_short[d] = short_wd
+            wd_total_over[d]  = over_wd
         else:
+            pass
+        if not is_rest:
             # 平日: 病棟≥min_ward_wd, HCU≥min_hcu_wd, ER≥min_er_wd
             ds_w = pulp.LpVariable(f"ds_ward_wd_{d}", lowBound=0)
             prob += ds_w >= min_ward_wd - ward_sum
@@ -1229,8 +1253,10 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             day_short[("er_wd", d)] = ds_e
             prob += er_sum >= max(1, min_er_wd - 1)
 
-            # ER: ERリーダー(CLS_ERL)を必ず1名以上配置
-            prob += pulp.lpSum(ud[s, d, UNIT_ER] for s in erl_staff) >= 1
+            # ER: ERリーダー必須(>=1) → ソフト化
+            erl_s = pulp.LpVariable(f"erl_short_{d}", lowBound=0)
+            prob += pulp.lpSum(ud[s, d, UNIT_ER] for s in erl_staff) + erl_s >= 1
+            erl_short[d] = erl_s
 
     # ================================================================
     # 3E: 夜勤ユニット制約（病棟2・HCU1・リーダー1 = 計4名）
@@ -1516,25 +1542,51 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     # ユニット配置不足ペナルティ
     unit_short_vars = list(day_short.values())
 
+    # ─── 平日日勤系合計の月内平準化（wd_max - wd_min を最小化） ───
+    wd_days_idx = [d for d in days if (d + 1) not in rest_days_set]
+    wd_level_gap = None
+    if wd_days_idx:
+        wd_max_var = pulp.LpVariable("wd_total_max", lowBound=0)
+        wd_min_var = pulp.LpVariable("wd_total_min", lowBound=0)
+        for d in wd_days_idx:
+            wd_day_sum_d = pulp.lpSum(x[s, d, t] for s in names for t in DAY_SHIFTS)
+            prob += wd_max_var >= wd_day_sum_d
+            prob += wd_min_var <= wd_day_sum_d
+        wd_level_gap = wd_max_var - wd_min_var
+
     # 目的関数 (3E版)
-    # P0 夜勤リーダー欠      300
-    # P1 希望未達            250
-    # P0 ユニット人数不足    200
-    # P2 夜勤Max超過          25
-    # P3 夜勤均等             60
-    # P4 夜勤分散              6
-    # P5 推奨連勤超過          3
-    # P6 公休均等              8
+    # P0 必須制約(診断用)     2000  ← 下限割れ/休日上限超過/ERL/共L/遅出 不足
+    # P0 夜勤リーダー欠        300
+    # P1 希望未達              250
+    # P0 ユニット人数不足      200
+    # P2 平日上限超過          150  ← 超過は平準化でなるべく抑制
+    # P3 平日月内平準化         40  ← wd_max - wd_min
+    # P4 夜勤Max超過            25
+    # P5 夜勤均等               60
+    # P6 夜勤分散                6
+    # P7 推奨連勤超過            3
+    # P8 公休均等                8
     obj = (
         300 * pulp.lpSum(a_miss[d] for d in days)
         + 250 * pulp.lpSum(req_miss[k] for k in req_miss)
         + 200 * pulp.lpSum(unit_short_vars)
+        # ── 必須制約ソフト化ペナルティ（違反ゼロが理想） ──
+        + 2000 * pulp.lpSum(wd_total_short.values())
+        + 2000 * pulp.lpSum(hd_total_short.values())
+        + 2000 * pulp.lpSum(hd_total_over.values())
+        + 2000 * pulp.lpSum(erl_short.values())
+        + 2000 * pulp.lpSum(lead_short_v.values())
+        + 2000 * pulp.lpSum(late_short_v.values())
+        # ── 平日上限/平準化 ──
+        + 150 * pulp.lpSum(wd_total_over.values())
         +  25 * pulp.lpSum(night_max_over[s] for s in night_max_over)
         +  60 * (n_max_var - n_min_var)
         +   6 * pulp.lpSum(night_spread[i] for i in night_spread)
         +   3 * pulp.lpSum(cp[i] for i in cp)
         +   8 * (max_off - min_off)
     )
+    if wd_level_gap is not None:
+        obj += 40 * wd_level_gap
     if night_min_miss:
         obj += 40 * pulp.lpSum(night_min_miss[s] for s in night_min_miss)
     prob += obj
@@ -1565,7 +1617,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
 
         if status != pulp.constants.LpStatusOptimal:
             if pat_idx == 0:
-                print("✗ 解なし。希望・設定を見直してください。")
+                print("✗ 解なし（構造制約レベル）。夜勤固定枠・クラス配属・希望=Xの組合せを見直してください。")
                 return None
             else:
                 print(f"    パターン{pat_num}以降は生成できませんでした。")
@@ -1592,6 +1644,42 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         _print_result(pat_num, schedule, names, tiers, weekly, parttime,
                       days, holidays, weekends, public_off, min_day, min_day_excl,
                       a_miss, missed_requests, day_short, day_short_excl, year, month)
+
+        # ─── 違反診断サマリ ───
+        def _vio(d_map, label):
+            items = []
+            for dd, var in d_map.items():
+                v = pulp.value(var) or 0
+                if v > 0.5:
+                    items.append((dd + 1, int(round(v))))
+            if items:
+                days_str = ", ".join(f"{dn}日(-{vv})" if "不足" in label or "割れ" in label
+                                      else f"{dn}日(+{vv})" for dn, vv in items)
+                print(f"  ⚠ {label}: {len(items)}日 [{days_str}]")
+                return True
+            return False
+
+        any_vio = False
+        print("\n  --- 制約違反サマリ ---")
+        any_vio |= _vio(wd_total_short, "平日 日勤系合計 下限割れ")
+        any_vio |= _vio(wd_total_over,  "平日 日勤系合計 上限超過")
+        any_vio |= _vio(hd_total_short, "休日 日勤系合計 下限割れ")
+        any_vio |= _vio(hd_total_over,  "休日 日勤系合計 上限超過")
+        any_vio |= _vio(erl_short,      "平日 ERリーダー必須(>=1) 不足")
+        any_vio |= _vio(lead_short_v,   "共リーダー配置 不足")
+        any_vio |= _vio(late_short_v,   "遅出配置 不足")
+        if not any_vio:
+            print("  ✓ 必須制約は全て充足")
+        # 平日日勤系の最大/最小（平準化チェック）
+        if wd_days_idx:
+            wd_sums = []
+            for d in wd_days_idx:
+                v = sum(int(round(pulp.value(x[s, d, t]) or 0)) for s in names for t in DAY_SHIFTS)
+                wd_sums.append((d + 1, v))
+            if wd_sums:
+                vals = [v for _, v in wd_sums]
+                print(f"  平日日勤系合計: min={min(vals)} max={max(vals)} 差={max(vals)-min(vals)}")
+        print("")
         # 夜勤均等度表示（N+SN合計）
         nd_counts = {s: sum(schedule[s].count(t) for t in NIGHT_SHIFTS) for s in ft_non_ded}
         if nd_counts:
