@@ -1215,20 +1215,33 @@ else:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("日勤ユニット最低人数")
-st.sidebar.caption("平日")
-col1a, col1b, col1c, col1d = st.sidebar.columns(4)
+st.sidebar.caption("平日 ユニット別最低人数")
+col1a, col1b, col1c = st.sidebar.columns(3)
 min_ward_wd = col1a.number_input("病棟", 1, 20, 4, key="inp_min_ward_wd")
 min_hcu_wd  = col1b.number_input("HCU", 1, 20, 2, key="inp_min_hcu_wd")
-min_er_wd   = col1c.number_input("ER", 1, 20, 3, key="inp_min_er_wd")
-max_day_wd  = col1d.number_input("上限", 5, 30, 14, key="inp_max_day_wd",
-                                   help="平日の日勤系(D/遅/早等)合計の上限（偏り防止）")
-st.sidebar.caption("休日（土日祝）")
-col2a, col2b, col2c, col2d = st.sidebar.columns(4)
+min_er_wd   = col1c.number_input("ER ❓", 1, 20, 3, key="inp_min_er_wd",
+                                   help="うちERリーダー1名必須（ERL可フラグ保持者）")
+st.sidebar.caption("休日 ユニット別最低人数（休日ERはなし）")
+col2a, col2b = st.sidebar.columns(2)
 min_ward_hd = col2a.number_input("病棟", 1, 20, 4, key="inp_min_ward_hd")
 min_hcu_hd  = col2b.number_input("HCU", 1, 20, 2, key="inp_min_hcu_hd")
-min_day_hd  = col2c.number_input("下限", 4, 20, 8, key="inp_min_day_hd",
+
+st.sidebar.caption("共通配置（毎日固定）")
+col3a, col3b = st.sidebar.columns(2)
+leader_count = col3a.number_input("共リーダー", 0, 5, 1, key="inp_leader_count",
+                                   help="毎日固定で配置する共リーダー人数（リーダー可フラグ保持者から）")
+late_count   = col3b.number_input("遅出", 0, 5, 1, key="inp_late_count",
+                                   help="毎日固定で配置する遅出人数（遅出可フラグ保持者から）")
+
+st.sidebar.caption("日勤系合計 下限〜上限")
+col4a, col4b, col4c, col4d = st.sidebar.columns(4)
+min_day_wd  = col4a.number_input("平日↓", 5, 30, 11, key="inp_min_day_wd",
+                                   help="平日の日勤系合計の下限（病棟+HCU+ER+共L+遅出）")
+max_day_wd  = col4b.number_input("平日↑", 5, 30, 14, key="inp_max_day_wd",
+                                   help="平日の日勤系合計の上限（偏り防止）")
+min_day_hd  = col4c.number_input("休日↓", 4, 20, 8, key="inp_min_day_hd",
                                    help="土日祝の日勤系合計の下限")
-max_day_hd  = col2d.number_input("上限", 4, 20, 8, key="inp_max_day_hd",
+max_day_hd  = col4d.number_input("休日↑", 4, 20, 8, key="inp_max_day_hd",
                                    help="土日祝の日勤系合計の上限（超過は公休へ）")
 st.sidebar.info("🌙 夜勤: 病棟2+HCU1+リーダー1=4名固定")
 
@@ -1271,8 +1284,10 @@ settings = {
     "public_off_override": po_override,
     "min_ward_wd": min_ward_wd, "min_hcu_wd": min_hcu_wd, "min_er_wd": min_er_wd,
     "min_ward_hd": min_ward_hd, "min_hcu_hd": min_hcu_hd,
+    "leader_count": leader_count, "late_count": late_count,
     "min_day_staff_hd": min_day_hd,
     "max_day_staff_hd": max_day_hd,
+    "min_day_staff_wd": min_day_wd,
     "max_day_staff_wd": max_day_wd,
     "max_night": max_n_reg, "pref_night": pref_n_reg,
     "max_consecutive": max_consec, "pref_consecutive": pref_consec,

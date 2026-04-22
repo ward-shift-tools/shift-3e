@@ -154,8 +154,11 @@ SETTINGS_DEF = [
     ("ER最低人数_平日",       3,    "平日のER最低配置人数（1名はERリーダー必須）"),
     ("病棟最低人数_休日",     4,    "土日祝の病棟最低配置人数"),
     ("HCU最低人数_休日",      2,    "土日祝のHCU最低配置人数"),
+    ("共リーダー人数",        1,    "毎日固定の共リーダー配置数"),
+    ("遅出人数",              1,    "毎日固定の遅出配置数"),
     ("休日日勤下限",          8,    "土日祝の日勤系(D/遅/早等)合計の下限"),
     ("休日日勤上限",          8,    "土日祝の日勤系(D/遅/早等)合計の上限"),
+    ("平日日勤下限",          11,   "平日の日勤系(D/遅/早等)合計の下限"),
     ("平日日勤上限",          14,   "平日の日勤系(D/遅/早等)合計の上限（偏り防止）"),
     ("夜勤上限",              5,    "月あたり最大夜勤回数"),
     ("夜勤推奨",              4,    "月あたり推奨夜勤回数"),
@@ -168,8 +171,9 @@ SETTINGS_KEYS = [
     "year", "month", "public_off_override",
     "min_ward_wd", "min_hcu_wd", "min_er_wd",
     "min_ward_hd", "min_hcu_hd",
+    "leader_count", "late_count",
     "min_day_staff_hd", "max_day_staff_hd",
-    "max_day_staff_wd",
+    "min_day_staff_wd", "max_day_staff_wd",
     "max_night", "pref_night",
     "max_consecutive", "pref_consecutive",
     "solver_time_limit", "holidays",
@@ -818,7 +822,10 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     min_day_excl = S("min_day_staff_excl_new", 4)  # 新人除く日勤最低人数
     min_day_hd  = S("min_day_staff_hd", 8)   # 土日祝の日勤系合計下限
     max_day_hd  = S("max_day_staff_hd", 8)   # 土日祝の日勤系合計上限
+    min_day_wd  = S("min_day_staff_wd", 11)  # 平日の日勤系合計下限
     max_day_wd  = S("max_day_staff_wd", 14)  # 平日の日勤系合計上限
+    leader_count = S("leader_count", 1)      # 共リーダー配置数
+    late_count   = S("late_count", 1)        # 遅出配置数
     night_count = S("night_staff_count", 2)
     max_n_reg   = S("max_night_regular", 5)
     pref_n_reg  = S("pref_night_regular", 4)
@@ -1108,13 +1115,13 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     # ================================================================
     # 3E: 遅出制約
     # ================================================================
-    # 遅出(L) は1日1名固定（can_late=Trueのスタッフのみ）
+    # 遅出(L) は1日 late_count 名固定（can_late=Trueのスタッフのみ）
     late_short = {}
     for d in days:
         late_sum = pulp.lpSum(x[s, d, L] for s in late_pool) if late_pool else pulp.lpSum([])
-        # ハード: 遅出は必ず1名
-        if late_pool:
-            prob += late_sum == 1
+        # ハード: 遅出は必ず late_count 名
+        if late_pool and late_count > 0:
+            prob += late_sum == late_count
         # 遅出の翌日: 休(O) か 夜勤(N) のみ
         if d < num_days - 1:
             for s in late_pool:
@@ -1179,8 +1186,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         er_sum    = pulp.lpSum(ud[s, d, UNIT_ER]   for s in names)
         lead_sum  = pulp.lpSum(ud[s, d, UNIT_LEAD] for s in names)
 
-        # 共通リーダーは毎日1名（平日・休日とも）
-        prob += lead_sum == 1
+        # 共通リーダーは毎日 leader_count 名（平日・休日とも）
+        prob += lead_sum == leader_count
 
         if is_rest:
             # 休日: 病棟≥min_ward_hd, HCU≥min_hcu_hd, ER=0
@@ -1200,9 +1207,10 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             rest_day_sum = pulp.lpSum(x[s, d, t] for s in names for t in DAY_SHIFTS)
             prob += rest_day_sum >= min_day_hd
             prob += rest_day_sum <= max_day_hd
-        # 平日日勤系合計 ≤ max_day_wd（偏り防止）
+        # 平日日勤系合計: min_day_wd ≤ sum ≤ max_day_wd
         if not is_rest:
             wd_day_sum = pulp.lpSum(x[s, d, t] for s in names for t in DAY_SHIFTS)
+            prob += wd_day_sum >= min_day_wd
             prob += wd_day_sum <= max_day_wd
         else:
             # 平日: 病棟≥min_ward_wd, HCU≥min_hcu_wd, ER≥min_er_wd
@@ -1241,8 +1249,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
 
     print(f"  夜勤: 4名固定（病棟2+HCU1+リーダー1）")
     print(f"  遅出可能スタッフ: {len(late_pool)}名")
-    print(f"  平日日勤: 病棟≥{min_ward_wd}, HCU≥{min_hcu_wd}, ER≥{min_er_wd}+ERリーダー1（合計上限{max_day_wd}名）")
-    print(f"  休日日勤: 病棟≥{min_ward_hd}, HCU≥{min_hcu_hd}, ER=0（合計{min_day_hd}〜{max_day_hd}名）")
+    print(f"  平日日勤: 病棟≥{min_ward_wd}, HCU≥{min_hcu_wd}, ER≥{min_er_wd}(内ERL1), 共L={leader_count}, 遅出={late_count}（合計{min_day_wd}〜{max_day_wd}名）")
+    print(f"  休日日勤: 病棟≥{min_ward_hd}, HCU≥{min_hcu_hd}, ER=0, 共L={leader_count}, 遅出={late_count}（合計{min_day_hd}〜{max_day_hd}名）")
 
     # day_short_excl は3Eでは未使用（新人制度なし）
     day_short_excl = {}
