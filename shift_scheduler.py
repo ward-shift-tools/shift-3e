@@ -1848,6 +1848,20 @@ def _write_one_sheet(wb, result, sheet_title):
                     cell.fill = _PF(start_color="FF9999", end_color="FF9999", fill_type="solid")
         row += 1
 
+    # リーダー可 / ERリーダー可（勤務中人数）
+    _ldr_map = result.get("is_leader_map", {})
+    _erl_map = result.get("is_er_leader_map", {})
+    _WORK = set(DAY_SHIFTS) | set(NIGHT_SHIFTS)
+    for tl3, _map in [("リーダー可", _ldr_map), ("ERリーダー可", _erl_map)]:
+        ws.cell(row=row, column=1, value=tl3).font = FONT_H
+        ws.cell(row=row, column=1).border = BDR
+        for d in range(num_days):
+            cnt = sum(1 for s in names if _map.get(s) and schedule[s][d] in _WORK)
+            cell = ws.cell(row=row, column=d+3, value=cnt)
+            cell.alignment = CTR; cell.border = BDR
+            cell.font = Font(bold=True, color="1F4E79")
+        row += 1
+
     row += 1
     ws.cell(row=row, column=1, value="夜勤ペア").font = FONT_H
     row += 1
