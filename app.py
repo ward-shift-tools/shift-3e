@@ -1260,7 +1260,7 @@ st.sidebar.markdown(
 col4a, col4b, col4c, col4d = st.sidebar.columns(4)
 min_day_wd  = col4a.number_input("平日↓", 5, 30, 11, key="inp_min_day_wd",
                                    help="平日の日勤系合計の下限（病棟+HCU+ER+共L+遅出）")
-max_day_wd  = col4b.number_input("平日↑", 5, 30, 14, key="inp_max_day_wd",
+max_day_wd  = col4b.number_input("平日↑", 5, 30, 15, key="inp_max_day_wd",
                                    help="平日の日勤系合計の上限（偏り防止）")
 min_day_hd  = col4c.number_input("休日↓", 4, 20, 8, key="inp_min_day_hd",
                                    help="土日祝の日勤系合計の下限")
