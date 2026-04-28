@@ -2161,6 +2161,39 @@ def _write_one_sheet(wb, result, sheet_title):
     return ws
 
 
+def _write_source_sheet(wb, result, sheet_title):
+    """パターンシートに対応するソース情報シートを wb に追加。
+    各セルに 'admin' / 'user' / '' を plain text で記録。
+    shift-cf の import-3e が SheetJS で読んで isAdminOverride を設定するために使用。
+    """
+    schedule        = result["schedule"]
+    names           = result["names"]
+    num_days        = result["num_days"]
+    requests        = result["requests"]          # {name: {day: shiftCode}}
+    requests_source = result.get("requests_source", {})  # {name: {day: 'admin'|'user'}}
+    missed          = result.get("missed_requests", {})   # {name: [day_nums]}
+
+    ws = wb.create_sheet(title=sheet_title)
+    ws.cell(row=1, column=1, value=f"{sheet_title} (source info)")
+
+    # ヘッダ行
+    ws.cell(row=3, column=1, value="名前")
+    for d in range(1, num_days + 1):
+        ws.cell(row=3, column=1 + d, value=d)
+
+    for row_i, s in enumerate(names):
+        ws.cell(row=4 + row_i, column=1, value=s)
+        rd    = requests.get(s, {})
+        rs    = requests_source.get(s, {})
+        md    = set(missed.get(s, []))
+        for d in range(1, num_days + 1):
+            src = ''
+            if d in rd and d not in md:
+                # 希望が尊重されたセル: admin/user 由来をそのまま記録
+                src = rs.get(d, 'user')
+            ws.cell(row=4 + row_i, column=1 + d, value=src)
+
+
 def export_excel(results):
     """results: list of result dicts → 1ファイルにパターン別シート"""
     if not results:
@@ -2176,6 +2209,7 @@ def export_excel(results):
         pat = result.get("pattern_num", 1)
         title = f"パターン{pat}" if len(results) > 1 else "勤務表"
         _write_one_sheet(wb, result, title)
+        _write_source_sheet(wb, result, f"{title}_ソース")
 
     path = os.path.join(BASE_DIR, f"勤務表_{year}_{month:02d}.xlsx")
     wb.save(path)

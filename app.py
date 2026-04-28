@@ -18,7 +18,7 @@ from shift_scheduler import (
     CLS_ER, CLS_HCU, CLS_WD, VALID_CLASSES,
     TIER_A, TIER_AB, TIER_B, TIER_CP, TIER_C, VALID_TIERS,
     UNIT_WD, UNIT_HCU, UNIT_ER, UNIT_LEAD,
-    _get_holidays_and_days_off, _write_one_sheet,
+    _get_holidays_and_days_off, _write_one_sheet, _write_source_sheet,
     SETTINGS_DEF, SETTINGS_KEYS,
     _parse_staff_list, _parse_requests, _parse_settings,
 )
@@ -1084,7 +1084,48 @@ def _parse_uploaded_excel(uploaded_file, year, month):
     # 3. 旧分離形式: 「スタッフ一覧」+「勤務希望」
     staff_list = []
     reqs = {}
+    reqs_source = {}  # {staff_name: {day: 'admin'|'user'}} — exceljs の色から判定
     n_staff_cols = 13  # 名前〜土日不可（3E: 13列）
+
+    # shift-cf の excel-export.ts が書く ARGB 値
+    _ADMIN_FILL = 'FFDCE6F1'  # 青系 (管理者上書き)
+    _USER_FILL  = 'FFFCE4D6'  # 赤系 (スタッフ希望)
+
+    def _cell_source(cell):
+        """セルの背景色から 'admin'/'user'/'' を返す"""
+        try:
+            fill = cell.fill
+            if fill and fill.fill_type == 'solid':
+                rgb = (fill.fgColor.rgb or '').upper()
+                if rgb == _ADMIN_FILL:
+                    return 'admin'
+                if rgb == _USER_FILL:
+                    return 'user'
+        except Exception:
+            pass
+        return ''
+
+    def _read_req_sources(ws_rq, staff_names_list, day_start_col):
+        """勤務希望シートの各セルの色から reqs_source を構築"""
+        src = {}
+        for r in range(4, ws_rq.max_row + 1):
+            row_idx = r - 4
+            name_val = ws_rq.cell(row=r, column=1).value
+            if (not name_val or not str(name_val).strip()) and row_idx < len(staff_names_list):
+                name_val = staff_names_list[row_idx]
+            if not name_val or not str(name_val).strip():
+                continue
+            name = str(name_val).strip()
+            day_map = {}
+            for d in range(1, num_days + 1):
+                cell = ws_rq.cell(row=r, column=day_start_col + d - 1)
+                if cell.value is not None and str(cell.value).strip():
+                    s = _cell_source(cell)
+                    if s:
+                        day_map[d] = s
+            if day_map:
+                src[name] = day_map
+        return src
 
     if "スタッフ情報" in wb.sheetnames:
         # === 新形式（スタッフ情報 + 勤務希望 2シート） ===
@@ -1121,6 +1162,7 @@ def _parse_uploaded_excel(uploaded_file, year, month):
                 req_rows.append(r_vals)
             if req_rows:
                 reqs = _parse_requests(req_rows, staff_names, num_days)
+            reqs_source = _read_req_sources(ws_rq, staff_names, day_start)
 
     elif "スタッフ・勤務希望" in wb.sheetnames:
         # === 旧統合形式 ===
@@ -1164,7 +1206,7 @@ def _parse_uploaded_excel(uploaded_file, year, month):
                     req_rows.append(row_vals)
             reqs = _parse_requests(req_rows, staff_names, num_days)
 
-    return staff_list, reqs, gs_settings
+    return staff_list, reqs, gs_settings, reqs_source
 
 
 # ============================================================
@@ -1448,7 +1490,7 @@ with tab0:
                              key="btn_load_excel"):
                     try:
                         with st.spinner("読み込み中..."):
-                            staff_list, reqs, gs_settings = _parse_uploaded_excel(
+                            staff_list, reqs, gs_settings, reqs_source = _parse_uploaded_excel(
                                 uploaded, year, month)
                         if gs_settings:
                             _apply_settings(gs_settings)
@@ -1457,6 +1499,7 @@ with tab0:
                             ["日", "夜", "短", "休", "研", "委", "夜不", "休暇", "明休"])
                         st.session_state.staff_df = _staff_to_df(staff_list)
                         st.session_state.requests_df = _reqs_to_df(reqs, staff_list, num_days)
+                        st.session_state.reqs_source = reqs_source
                         st.session_state.data_loaded = True
                         st.success(f"✅ {len(staff_list)}人のスタッフと希望を読み込みました")
                         st.rerun()
@@ -1853,6 +1896,10 @@ with tab3:
             console_output = console.getvalue()
 
             if results:
+                # 入力 xlsx から読んだ admin/user 色情報を各パターンに付与
+                _rs = st.session_state.get("reqs_source", {})
+                for _r in results:
+                    _r["requests_source"] = _rs
                 st.session_state.results = results
                 st.session_state.console_output = console_output
                 st.success(f"✅ {len(results)}パターン生成完了！「結果」タブで確認できます。")
@@ -1865,6 +1912,7 @@ with tab3:
                     pat = res.get("pattern_num", 1)
                     title = f"3E_パターン{pat}" if len(results) > 1 else "3E勤務表"
                     _write_one_sheet(wb, res, title)
+                    _write_source_sheet(wb, res, f"{title}_ソース")
                 wb.save(buf)
                 buf.seek(0)
                 st.session_state.excel_bytes = buf.getvalue()
@@ -1931,6 +1979,7 @@ with tab4:
                 _pat = _res.get("pattern_num", 1)
                 _title = f"3E_パターン{_pat}" if len(results) > 1 else "3E勤務表"
                 _write_one_sheet(_wb, _res, _title)
+                _write_source_sheet(_wb, _res, f"{_title}_ソース")
             _wb.save(_buf)
             _buf.seek(0)
             st.session_state.excel_bytes = _buf.getvalue()
