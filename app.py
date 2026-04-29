@@ -2085,19 +2085,56 @@ with tab4:
 
         df = pd.DataFrame(table_data)
 
-        def color_shifts(val):
-            if val in shift_colors:
-                bg = shift_colors[val]
-                fg = shift_text_colors.get(val, "#000000")
-                return f"background-color: {bg}; color: {fg}; text-align: center; font-weight: {'bold' if val == N else 'normal'}"
-            return "text-align: center"
+        # 希望由来セルの判定マップを構築
+        _reqs_for_style = result.get("requests", {})
+        _missed_for_style = result.get("missed_requests", {})
+        _rsrc_for_style = result.get("requests_source", {})
+        # honored_cells: {(row_idx, col_name): 'user'|'admin'}
+        # missed_cells: {(row_idx, col_name): True}
+        honored_cells = {}
+        missed_cells = {}
+        for row_idx, s in enumerate(names):
+            rd = _reqs_for_style.get(s, {})
+            md = set(_missed_for_style.get(s, []))
+            rs = _rsrc_for_style.get(s, {})
+            for d_num in rd:
+                col_name = str(d_num)
+                if d_num in md:
+                    missed_cells[(row_idx, col_name)] = True
+                else:
+                    honored_cells[(row_idx, col_name)] = rs.get(d_num, 'user')
+
+        def color_shifts_with_source(row):
+            """行単位のスタイラー: シフト色 + 希望由来の枠線"""
+            row_idx = row.name  # DataFrame index
+            styles = []
+            for col in row.index:
+                val = row[col]
+                base = "text-align: center; "
+                if val in shift_colors:
+                    bg = shift_colors[val]
+                    fg = shift_text_colors.get(val, "#000000")
+                    base += f"background-color: {bg}; color: {fg}; font-weight: {'bold' if val == N else 'normal'}; "
+                # 希望由来マーキング
+                key = (row_idx, col)
+                if key in honored_cells:
+                    src = honored_cells[key]
+                    if src == 'admin':
+                        base += "border: 3px solid #3B82F6; "   # 青枠 = 管理者上書き
+                    else:
+                        base += "border: 3px solid #F43F5E; "   # 赤枠 = スタッフ希望
+                elif key in missed_cells:
+                    base += "border: 3px dashed #F97316; "      # オレンジ破線 = 未達希望
+                styles.append(base)
+            return styles
 
         # ── シフト表示モード切替 ─────────────────────────────
         view_mode = st.radio("表示モード", ["👁 確認", "✏️ 手動編集"],
                              horizontal=True, key=f"view_mode_{pat_idx}")
 
         if view_mode == "👁 確認":
-            styled = df.style.map(color_shifts, subset=day_cols)
+            styled = df.style.apply(color_shifts_with_source, axis=1, subset=day_cols)
+            st.caption("🔴 赤枠=スタッフ希望反映　🔵 青枠=管理者上書き反映　🟠 破線=未達希望")
             st.dataframe(styled, use_container_width=True, height=600, hide_index=True)
         else:
             st.caption("⚠ セルを直接編集できます。変更後「変更を保存」を押してください。")
