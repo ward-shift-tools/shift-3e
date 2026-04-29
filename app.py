@@ -2129,10 +2129,40 @@ with tab4:
             )
             if st.button("💾 変更を保存", key=f"save_edit_{pat_idx}"):
                 # edited_df の内容をresultsに反映
+                old_schedule = st.session_state.results[pat_idx]["schedule"]
                 new_schedule = {}
                 for _, row in edited_df.iterrows():
                     sname = row["名前"]
                     new_schedule[sname] = [row[dc] for dc in day_cols]
+                # 管理者が手動変更したセルを requests / requests_source に admin として追加
+                _cur_res = st.session_state.results[pat_idx]
+                _reqs = _cur_res.get("requests", {})
+                _rsrc = _cur_res.get("requests_source", {})
+                for sname, new_shifts in new_schedule.items():
+                    old_shifts = old_schedule.get(sname, [])
+                    for d_idx, new_val in enumerate(new_shifts):
+                        day_num = d_idx + 1
+                        old_val = old_shifts[d_idx] if d_idx < len(old_shifts) else None
+                        if new_val != old_val:
+                            # 変更されたセル → admin 由来として記録
+                            if sname not in _reqs:
+                                _reqs[sname] = {}
+                            _reqs[sname][day_num] = new_val
+                            if sname not in _rsrc:
+                                _rsrc[sname] = {}
+                            _rsrc[sname][day_num] = 'admin'
+                _cur_res["requests"] = _reqs
+                _cur_res["requests_source"] = _rsrc
+                # missed_requests から admin 変更セルを除去（尊重済みとして扱う）
+                _missed = _cur_res.get("missed_requests", {})
+                for sname, new_shifts in new_schedule.items():
+                    old_shifts = old_schedule.get(sname, [])
+                    for d_idx, new_val in enumerate(new_shifts):
+                        day_num = d_idx + 1
+                        if new_val != (old_shifts[d_idx] if d_idx < len(old_shifts) else None):
+                            if sname in _missed and day_num in _missed[sname]:
+                                _missed[sname].remove(day_num)
+                _cur_res["missed_requests"] = _missed
                 st.session_state.results[pat_idx]["schedule"] = new_schedule
                 # excel_bytes も再生成して Excel出力ボタンに反映
                 from openpyxl import Workbook as _WB2
