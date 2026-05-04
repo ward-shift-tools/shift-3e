@@ -1551,9 +1551,14 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
             print(alert)
         print(f"  → Infeasibleの原因になる可能性があります。\n")
 
-    # 勤務希望: 全てハード制約（解なし時はInfeasibleで通知）
-    req_miss = {}  # ソフト制約用（現在は遅出希望のみ使用）
+    # 勤務希望:
+    #   ハード制約 = 休み・夜不・休暇・明休・研修（絶対守る）
+    #   準ハード制約 = 日勤・夜勤・遅出（超高ペナルティ50000、ほぼ絶対だが解なし回避）
+    # 運用: 準ハード未達があればスタッフへ変更依頼
+    REQ_PENALTY = 50000  # 通常ペナルティ(500)の100倍 → ほぼ絶対守る
+    req_miss = {}
     hard_req_log = {}  # {種別: 件数} ログ用
+    quasi_hard_log = {}  # 準ハード制約のログ
     for s, s_reqs in requests.items():
         if s not in names:
             continue
@@ -1576,33 +1581,43 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                     # 休み希望: ハード制約（必ず公休にする）
                     prob += x[s, d_idx, O] == 1
                     hard_req_log["休"] = hard_req_log.get("休", 0) + 1
-                elif shift_type == "遅希":
-                    # 遅出希望: ハード制約（can_late=True のスタッフのみ）
-                    if can_late.get(s):
-                        prob += x[s, d_idx, L] == 1
-                        hard_req_log["遅希"] = hard_req_log.get("遅希", 0) + 1
-                    # can_late=False のスタッフは遅出不可のため無視
                 elif shift_type == R:
                     # 研修: ハード制約
                     prob += x[s, d_idx, R] == 1
                     hard_req_log["研修"] = hard_req_log.get("研修", 0) + 1
                 elif shift_type == I:
                     pass  # 3Eでは委員会なし、無視
+                elif shift_type == "遅希":
+                    # 遅出希望: 準ハード制約（can_late=True のスタッフのみ）
+                    if can_late.get(s):
+                        key = (s, d_idx)
+                        req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
+                        prob += x[s, d_idx, L] + req_miss[key] >= 1
+                        quasi_hard_log["遅希"] = quasi_hard_log.get("遅希", 0) + 1
                 elif shift_type == D:
-                    # 日勤希望: ハード制約（日勤のみ、遅出は別業務なので不可）
-                    prob += x[s, d_idx, D] == 1
-                    hard_req_log["日勤"] = hard_req_log.get("日勤", 0) + 1
+                    # 日勤希望: 準ハード制約（遅出は別業務なので不可）
+                    key = (s, d_idx)
+                    req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
+                    prob += x[s, d_idx, D] + req_miss[key] >= 1
+                    quasi_hard_log["日勤"] = quasi_hard_log.get("日勤", 0) + 1
                 elif shift_type == N:
-                    # 夜勤希望: ハード制約
-                    prob += x[s, d_idx, N] == 1
-                    hard_req_log["夜勤"] = hard_req_log.get("夜勤", 0) + 1
+                    # 夜勤希望: 準ハード制約
+                    key = (s, d_idx)
+                    req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
+                    prob += x[s, d_idx, N] + req_miss[key] >= 1
+                    quasi_hard_log["夜勤"] = quasi_hard_log.get("夜勤", 0) + 1
                 else:
-                    # その他: ハード制約
-                    prob += x[s, d_idx, shift_type] == 1
-                    hard_req_log["他"] = hard_req_log.get("他", 0) + 1
+                    # その他: 準ハード制約
+                    key = (s, d_idx)
+                    req_miss[key] = pulp.LpVariable(f"rmiss_{s}_{d_idx}", cat=pulp.LpBinary)
+                    prob += x[s, d_idx, shift_type] + req_miss[key] >= 1
+                    quasi_hard_log["他"] = quasi_hard_log.get("他", 0) + 1
     if hard_req_log:
         parts = [f"{k}:{v}件" for k, v in hard_req_log.items()]
-        print(f"  勤務希望（全ハード制約）: {', '.join(parts)}  合計{sum(hard_req_log.values())}件")
+        print(f"  勤務希望（ハード制約）: {', '.join(parts)}  合計{sum(hard_req_log.values())}件")
+    if quasi_hard_log:
+        parts = [f"{k}:{v}件" for k, v in quasi_hard_log.items()]
+        print(f"  勤務希望（準ハード・ペナルティ{REQ_PENALTY}）: {', '.join(parts)}  合計{sum(quasi_hard_log.values())}件")
 
     # --- ソフト制約 ---
     # 3E: 夜勤リーダー欠如ペナルティ（leader_pool からリーダー夜勤が入るか）
@@ -1719,7 +1734,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
 
     obj = (
         300 * pulp.lpSum(a_miss[d] for d in days)
-        + 500 * pulp.lpSum(req_miss[k] for k in req_miss)
+        + REQ_PENALTY * pulp.lpSum(req_miss[k] for k in req_miss)
         + 200 * pulp.lpSum(unit_short_vars)
         # ── 必須制約ソフト化ペナルティ（違反ゼロが理想） ──
         + pulp.lpSum(2000 * v for v in _wd_short_list)
@@ -1805,6 +1820,20 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         for (s, d_idx), var in req_miss.items():
             if pulp.value(var) > 0.5:
                 missed_requests.setdefault(s, []).append(d_idx + 1)
+
+        # 希望未達の警告表示（要スタッフ調整）
+        if missed_requests:
+            print(f"\n  ⚠⚠⚠ 希望未達（要スタッフ調整）⚠⚠⚠")
+            for s_name, miss_days in missed_requests.items():
+                orig_reqs = requests.get(s_name, {})
+                details = []
+                for md in miss_days:
+                    rt = orig_reqs.get(md, "?")
+                    details.append(f"{md}日({rt})")
+                print(f"    {s_name}: {', '.join(details)}")
+            print(f"  → 上記スタッフに希望変更を依頼してください\n")
+        else:
+            print(f"\n  ✓ 全勤務希望を反映済み\n")
 
         # コンソール出力
         _print_result(pat_num, schedule, names, tiers, weekly, parttime,
