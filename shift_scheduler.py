@@ -1555,7 +1555,7 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
     #   ハード制約 = 休み・夜不・休暇・明休・研修（絶対守る）
     #   準ハード制約 = 日勤・夜勤・遅出（超高ペナルティ50000、ほぼ絶対だが解なし回避）
     # 運用: 準ハード未達があればスタッフへ変更依頼
-    REQ_PENALTY = 50000  # 通常ペナルティ(500)の100倍 → ほぼ絶対守る
+    REQ_PENALTY = 5000  # 他制約(2000)の2.5倍 → ほぼ絶対守る
     req_miss = {}
     hard_req_log = {}  # {種別: 件数} ログ用
     quasi_hard_log = {}  # 準ハード制約のログ
@@ -1796,13 +1796,27 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
         status = prob.solve(solver)
         print(f"    結果: {pulp.LpStatus[status]}")
 
-        if status != pulp.constants.LpStatusOptimal:
+        if status == pulp.constants.LpStatusInfeasible:
             if pat_idx == 0:
                 print("✗ 解なし（構造制約レベル）。夜勤固定枠・クラス配属・希望=Xの組合せを見直してください。")
                 return None
             else:
                 print(f"    パターン{pat_num}以降は生成できませんでした。")
                 break
+
+        # タイムアウト(Not Solved)でも途中解があれば使う
+        if status != pulp.constants.LpStatusOptimal:
+            # 途中解の有無を確認
+            test_val = pulp.value(x[names[0], 0, D])
+            if test_val is None:
+                if pat_idx == 0:
+                    print("✗ 時間内に解が見つかりませんでした。計算時間上限を増やすか、制約を見直してください。")
+                    return None
+                else:
+                    print(f"    パターン{pat_num}以降は生成できませんでした。")
+                    break
+            else:
+                print(f"    ⚠ 最適解ではありませんが、実行可能解を使用します（時間切れ）")
 
         # 結果取得
         schedule = {}
