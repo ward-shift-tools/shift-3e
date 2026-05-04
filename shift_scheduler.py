@@ -1589,8 +1589,8 @@ def build_and_solve(staff_list, requests, settings, num_patterns=1,
                 elif shift_type == I:
                     pass  # 3Eでは委員会なし、無視
                 elif shift_type == D:
-                    # 日勤希望: ハード制約（日勤系のいずれか = D or L）
-                    prob += x[s, d_idx, D] + x[s, d_idx, L] >= 1
+                    # 日勤希望: ハード制約（日勤のみ、遅出は別業務なので不可）
+                    prob += x[s, d_idx, D] == 1
                     hard_req_log["日勤"] = hard_req_log.get("日勤", 0) + 1
                 elif shift_type == N:
                     # 夜勤希望: ハード制約
