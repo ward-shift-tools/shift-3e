@@ -1868,6 +1868,14 @@ with tab3:
 
     st.markdown("---")
 
+    def _safe_bool(v):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return False
+        try:
+            return bool(v)
+        except (TypeError, ValueError):
+            return False
+
     if st.button("🚀 勤務表を生成", type="primary", use_container_width=True):
         staff_list = []
         for _, row in valid_staff.iterrows():
@@ -1876,12 +1884,12 @@ with tab3:
             if cls not in VALID_CLASSES:
                 st.warning(f"⚠ {name}: クラス '{cls}' 不正 → スキップ")
                 continue
-            is_ldr   = bool(row.get("リーダー可", False))
-            is_erl   = bool(row.get("ERリーダー可", False))
+            is_ldr   = _safe_bool(row.get("リーダー可"))
+            is_erl   = _safe_bool(row.get("ERリーダー可"))
             if is_erl and cls != CLS_ER:
                 st.warning(f"⚠ {name}: ERリーダー可はクラス=ER可のみ → 無効化")
                 is_erl = False
-            can_late = bool(row.get("遅出可", False))
+            can_late = _safe_bool(row.get("遅出可"))
             weekly = int(row["週勤務"]) if pd.notna(row.get("週勤務")) else None
             prev = str(row.get("前月末", "")).strip()
             if prev not in ("夜", "明", ""):
@@ -1898,16 +1906,16 @@ with tab3:
                         work_days.add(WEEKDAY_MAP[ch])
                 if not work_days:
                     work_days = None
-            no_hol = bool(row.get("祝日不可", False))
-            no_we = bool(row.get("土日不可", False))
-            late_mode_raw = str(row.get("遅出モード", "")).strip()
+            no_hol = _safe_bool(row.get("祝日不可"))
+            no_we = _safe_bool(row.get("土日不可"))
+            late_mode_raw = str(row.get("遅出モード") or "").strip()
             late_mode = 'specified_only' if late_mode_raw in ('指定日のみ', 'specified_only') else 'always'
-            is_night_only = bool(row.get("夜勤専従", False))
-            is_day_newbie = bool(row.get("日勤新人", False))
-            is_night_newbie = bool(row.get("夜勤新人", False))
-            triple_rem = int(row["+1人夜勤残"]) if pd.notna(row.get("+1人夜勤残")) else 0
-            can_mentor = bool(row.get("新人フォロー可", False))
-            monthly_leave = int(row["当月年休予定"]) if pd.notna(row.get("当月年休予定")) else 0
+            is_night_only = _safe_bool(row.get("夜勤専従"))
+            is_day_newbie = _safe_bool(row.get("日勤新人"))
+            is_night_newbie = _safe_bool(row.get("夜勤新人"))
+            triple_rem = int(float(row["+1人夜勤残"])) if pd.notna(row.get("+1人夜勤残")) else 0
+            can_mentor = _safe_bool(row.get("新人フォロー可"))
+            monthly_leave = int(float(row["当月年休予定"])) if pd.notna(row.get("当月年休予定")) else 0
             staff_list.append(Staff(
                 name, cls, is_leader=is_ldr, is_er_leader=is_erl,
                 can_late=can_late, late_mode=late_mode,
